@@ -122,8 +122,14 @@ class Transcriber:
         )
         if vad_params:
             kwargs["vad_parameters"] = vad_params
+        kwargs.update(self._extra_kwargs())
         segments, _info = self.model.transcribe(str(wav), **kwargs)
         return self._collect(segments, on_progress)
+
+    def _extra_kwargs(self) -> dict:
+        """Argumentos a mais para o faster-whisper, nos dois modos. Vazio aqui; o motor
+        novo do fork (motor_novo.WordTranscriber) pede a hora de cada palavra."""
+        return {}
 
     def _run_batched(self, wav: Path, batch: int, beam: int, vad_params: dict | None):
         """Inferência em lote (~2x mais rápida na GPU). None => cair para o modo normal."""
@@ -136,6 +142,7 @@ class Transcriber:
                           vad_filter=vad_enabled(self.cfg))
             if vad_params:
                 kwargs["vad_parameters"] = vad_params
+            kwargs.update(self._extra_kwargs())
             if self.cfg.hotwords:
                 try:
                     segments, _info = self.batched.transcribe(str(wav), hotwords=self.cfg.hotwords, **kwargs)

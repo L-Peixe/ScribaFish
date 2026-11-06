@@ -255,7 +255,8 @@ def diarize(wav: Path, cfg: Diarization, num_speakers: int | None = None,
                 return _diarize_chunked(pipe, audio, int(audio["sample_rate"]), chunk_s,
                                         num_speakers=kwargs.get("num_speakers"),
                                         max_speakers=kwargs.get("max_speakers"),
-                                        strict_first_block=strict_first_block)
+                                        strict_first_block=strict_first_block,
+                                        small_first=bool(getattr(cfg, "reduce_small_first", False)))
             if "num_speakers" in kwargs:
                 print(f"separando participantes por voz (fixo em {kwargs['num_speakers']} voz(es))...")
             else:
@@ -607,27 +608,50 @@ def _match_or_new_global(globals_: list, vec, threshold: float = _RELINK_THRESHO
     return gid
 
 
-def _reduce_globals_to(globals_: list, n: int) -> dict[str, str]:
+# Motor novo do fork: voz global com menos que esta fração do tempo de fala da call é
+# eco/ruído, não uma pessoa - na redução ao nº informado ela sai primeiro (call de
+# 05/11: uma voz de 17 s fazia a redução fundir a pessoa que fala pouco com outra).
+_VOZ_PEQUENA_FRAC = 0.05
+
+
+def _reduce_globals_to(globals_: list, n: int, durations: dict[str, float] | None = None) -> dict[str, str]:
     """Funde as vozes globais mais parecidas até sobrarem `n` (#198).
 
     Aglomerativo simples: a cada passo o par de centroides de maior cosseno vira
     um só (média ponderada pelas amostras). `globals_` é mutado; devolve o mapa
     {id fundido → id que ficou} p/ reescrever os trechos. Com `n` ≥ vozes atuais
     não faz nada (não dá para SEPARAR o que o clustering juntou — só juntar).
+
+    `durations` ({id: segundos de fala}, só no motor novo): antes do par mais parecido,
+    a voz com menos de _VOZ_PEQUENA_FRAC do tempo total é fundida na mais parecida com ela.
     """
     mapa: dict[str, str] = {}
+    dur = dict(durations) if durations else None
     while n >= 1 and len(globals_) > n:
-        best = (-2.0, 0, 1)
-        for i in range(len(globals_)):
-            for j in range(i + 1, len(globals_)):
-                s = _cosine(globals_[i][0], globals_[j][0])
-                if s > best[0]:
-                    best = (s, i, j)
-        _s, i, j = best
+        pequena = None
+        if dur:
+            total = sum(dur.get(g[2], 0.0) for g in globals_)
+            k = min(range(len(globals_)), key=lambda x: dur.get(globals_[x][2], 0.0))
+            if total > 0 and dur.get(globals_[k][2], 0.0) < _VOZ_PEQUENA_FRAC * total:
+                pequena = k
+        if pequena is not None:
+            j = pequena
+            i = max((x for x in range(len(globals_)) if x != j),
+                    key=lambda x: _cosine(globals_[x][0], globals_[j][0]))
+        else:
+            best = (-2.0, 0, 1)
+            for i in range(len(globals_)):
+                for j in range(i + 1, len(globals_)):
+                    s = _cosine(globals_[i][0], globals_[j][0])
+                    if s > best[0]:
+                        best = (s, i, j)
+            _s, i, j = best
         cen_i, n_i, gid_i = globals_[i]
         cen_j, n_j, gid_j = globals_[j]
         globals_[i] = [(cen_i * n_i + cen_j * n_j) / (n_i + n_j), n_i + n_j, gid_i]
         del globals_[j]
+        if dur is not None:
+            dur[gid_i] = dur.get(gid_i, 0.0) + dur.pop(gid_j, 0.0)
         # quem já apontava p/ gid_j passa a apontar p/ gid_i (fusões encadeadas)
         for k, v in list(mapa.items()):
             if v == gid_j:
@@ -638,7 +662,8 @@ def _reduce_globals_to(globals_: list, n: int) -> dict[str, str]:
 
 def _diarize_chunked(pipe, audio, sr: int, chunk_s: int, num_speakers: int | None = None,
                      max_speakers: int | None = None,
-                     strict_first_block: bool = False) -> tuple[list[Turn], dict[str, list[float]]] | None:
+                     strict_first_block: bool = False,
+                     small_first: bool = False) -> tuple[list[Turn], dict[str, list[float]]] | None:
     """Diariza áudio longo em blocos de `chunk_s` segundos, re-ligando as vozes
     entre blocos pelo embedding (cosseno). Cada bloco cabe na VRAM; entre blocos o
     cache CUDA é liberado — assim o pico fica por-bloco e nunca estoura. As vozes
@@ -725,7 +750,12 @@ def _diarize_chunked(pipe, audio, sr: int, chunk_s: int, num_speakers: int | Non
         # mais vozes globais que o informado: o clustering fragmentou alguém entre
         # blocos (voz "drifta" abaixo do limiar de re-ligação) - reduz ao N (#198)
         antes = len(globals_)
-        mapa = _reduce_globals_to(globals_, int(num_speakers))
+        durations = None
+        if small_first:  # motor novo: eco/ruído de poucos segundos sai antes de fundir pessoas
+            durations = {}
+            for s, e, lab in all_turns:
+                durations[lab] = durations.get(lab, 0.0) + (e - s)
+        mapa = _reduce_globals_to(globals_, int(num_speakers), durations=durations)
         all_turns = [(s, e, mapa.get(lab, lab)) for s, e, lab in all_turns]
         log.info("diarização: %d vozes globais reduzidas a %d (nº informado pelo usuário)",
                  antes, len(globals_))

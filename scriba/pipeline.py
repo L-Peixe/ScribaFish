@@ -91,12 +91,25 @@ def transcribe_folder(folder: Path, force_cpu: bool = False, transcriber: Transc
     _set_status(meta, meta_path, "transcribing")
 
     cfg = load()
+    # motor novo do fork ([whisper] motor = "novo"): hora de cada palavra, voz por
+    # palavra e o modelo de vozes model_novo. Só o Whisper local devolve palavras.
+    from . import motor_novo
+
+    novo = motor_novo.ativo(cfg.whisper, force_cpu)
     if transcriber is None:
         # o Whisper também recebe os termos aprendidos e aceitos (#227) no prompt
         from . import vocab_learn
 
         whisper = dataclasses.replace(cfg.whisper, hotwords=vocab_learn.whisper_hotwords(cfg.whisper.hotwords))
-        transcriber = make_transcriber(whisper, force_cpu=force_cpu)
+        if novo:
+            transcriber = motor_novo.WordTranscriber(whisper, force_cpu=force_cpu)
+        else:
+            transcriber = make_transcriber(whisper, force_cpu=force_cpu)
+    if novo:
+        print("motor novo: voz por palavra")
+        meta["motor"] = "novo"
+    else:
+        meta.pop("motor", None)
     tr = transcriber
     device = tr.ensure_loaded()
     if (cfg.whisper.engine or "local").strip().lower() == "cloud":
@@ -155,13 +168,15 @@ def transcribe_folder(folder: Path, force_cpu: bool = False, transcriber: Transc
         # marca o estágio antes de carregar o pyannote: a UI mostra "Separando vozes…"
         _set_status(meta, meta_path, "diarizing")
         lb_segments = next((seg for st, _sp, seg, _off in pending if st == "loopback"), [])
-        dz_result = diarize_mod.diarize(loopback_wav, cfg.diarization, num_speakers=num_speakers,
+        dz_cfg = motor_novo.diarization_cfg(cfg.diarization) if novo else cfg.diarization
+        dz_result = diarize_mod.diarize(loopback_wav, dz_cfg, num_speakers=num_speakers,
                                         meta=meta, force_cpu=force_cpu)  # --cpu vale p/ a diarização também (#115)
         if dz_result and dz_result.turns:
             meta.pop("diarization_error", None)  # sucesso: limpa erro de tentativa anterior
             meta.pop("diarization_deferred", None)
-            diarized_groups, order = diarize_mod.assign_speakers(lb_segments, dz_result.turns)
-            meta["diarization_model"] = cfg.diarization.model
+            assign = motor_novo.assign_words if novo else diarize_mod.assign_speakers
+            diarized_groups, order = assign(lb_segments, dz_result.turns)
+            meta["diarization_model"] = dz_cfg.model
             # enrollment de voz (#1): casa cada "Participante N" ao seu embedding,
             # aplica nomes já conhecidos e guarda as vozes p/ rotular na UI
             diarized_groups = _apply_voice_enrollment(
