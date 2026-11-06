@@ -22,14 +22,21 @@ seguem iguais. Motor da Apple, nuvem e MLX não dão palavras e ficam no clássi
 das vozes ao nº informado ganhou o ramo `durations` (voz com < 5% da fala sai primeiro), desligado no clássico. O modo
 exclusivo do `community-1` **não** é usado: na bancada deu o mesmo 17 de 17, e usá-lo pedia mexer mais no `diarize.py`.
 
-**Próximo passo:** o app que grava as calls roda o código de `../REPO` (instalação editável no venv do ScribaDev). Para
-o motor novo valer no dia a dia, o Lucas decide apontar o app para o fork e ligar `motor = "novo"`; depois, a etapa 4
-(os três modos de velocidade).
+**De onde o app roda:** o app que grava as calls roda do `../APP`, um clone do `main` do ScribaFish (instalação
+editável no venv do ScribaDev: `pip install -e ../APP --no-deps`), com `motor = 'novo'` no
+`%LOCALAPPDATA%\ScribaDev\config.toml`. A `APP` não se edita: ela só muda com PR mergeado + o botão "Atualizar" do app
+(`git pull --ff-only` nela). O trabalho em andamento fica na `FORK` e nunca chega às calls. **Desfazer:**
+`pip install -e ../REPO --no-deps` no venv e `motor = 'classico'`; o `../REPO` (1.4.21, do Allan) ficou intacto, e a cópia
+dos bancos e do config de antes da troca está em `%LOCALAPPDATA%\ScribaDev\backup-2026-11-06-antes-do-fork`.
+
+**Próximo passo:** conferir a primeira call real com o motor novo; depois, a etapa 4 (os três modos de velocidade).
 
 **Git:** `origin` = `git@github-lpeixe:L-Peixe/ScribaFish.git` (push pela chave SSH da L-Peixe, blueprint FREELAS
 §4.2), e-mail local `lucaspquimico@gmail.com`, push para o `upstream` desligado. PR **dentro do ScribaFish** (base
 `main`), nunca no repositório do Allan. O `gh` e o Chrome estão logados como `devsummus`: o PR o Lucas abre pelo link
-(ou passa um token da L-Peixe, que se revoga depois).
+`compare/main...<branch>` (ou passa um token da L-Peixe, que se revoga depois). **Versões do Allan:** o Lucas clica em
+"Sync fork" no GitHub do ScribaFish; se conflitar com o motor novo, o GitHub recusa e ele chama o Claude. O aviso de
+versão nova do app continua vindo do manifesto do Allan, mas o "Atualizar" só traz o que já está no ScribaFish.
 
 ## Medido
 
@@ -96,14 +103,17 @@ inteiro com o nº de vozes, e o nome de cada voz dado pelo conteúdo.
   lado, ou mais de uma pessoa no meu próprio local"* (duas pessoas no mesmo microfone, falando com uma terceira pelo
   Meet): **separar vozes também no microfone**.
 - **Nome das vozes:** voz cadastrada primeiro; o Claude propõe as demais pelo conteúdo e o Lucas confirma.
+- **Motor novo no dia a dia:** *"Sim, aponta"*. De onde roda: *"Pasta própria APP"* (não direto na `FORK`, para o
+  trabalho em andamento não chegar às calls).
+- **Versões do Allan:** *"Você clica em Sync fork"* (não um PR com teste antes).
 
 ## Regras do fork
 
-- **Base:** `upstream/main` do Allan (1.4.27 em 06/11), branch `motor-novo`. Remoto `upstream` =
+- **Base:** `upstream/main` do Allan (1.4.27 em 06/11); cada etapa numa branch + PR no ScribaFish. Remoto `upstream` =
   `allanrmartins/ScribaDev` (público, MIT; manter o aviso de copyright dele), só para puxar as melhorias dele; o
   `origin` é o ScribaFish (ver "Git").
-- **O ScribaDev instalado não é tocado:** ele roda de `../REPO` e segue gravando até o motor novo provar, com número,
-  que é melhor nas mesmas reuniões.
+- **A pasta do app (`../APP`) não se edita:** é de onde roda o ScribaDev que grava as calls (ver "De onde o app roda").
+  Uma etapa só chega nela depois de medida na bancada e mergeada.
 - **Código novo ao lado do antigo, atrás de chave:** `[whisper] motor = "classico" | "novo"`. Desfaz desligando a
   chave. Isso também mantém fácil trazer as atualizações do Allan.
 - **Conteúdo de reunião nunca entra no git.** A bancada (`bancada/`) é código; gabaritos e áudios ficam em
@@ -150,3 +160,6 @@ Cada etapa mede na bancada antes de ligar: palavras, falas com a voz certa (gaba
   `Transcriber._extra_kwargs()`, dois desvios no pipeline, chaves `motor` e `model_novo`. A redução das vozes em pedaços
   fundia a pessoa que fala pouco por causa de uma voz de eco de 17 s: no motor novo a voz pequena sai primeiro. Pipeline
   real na call de 27 min: 17 de 17 (o app instalado, 10). Áudio inteiro cancelado: os pedaços bastam, com 1,6 GB.
+- **2026-11-06** — PR #1 mergeado; o app das calls passou a rodar do `../APP` (clone do `main`), com `motor = 'novo'`
+  (decisão do Lucas: pasta própria, para o trabalho da `FORK` não chegar às calls). Conferido pela instalação nova, com o
+  config real: 17 de 17, 145 s, 1,59 GB. Versões do Allan entram pelo "Sync fork" do Lucas.
