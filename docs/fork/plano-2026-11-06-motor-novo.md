@@ -12,8 +12,23 @@
 | 3. Vozes no áudio inteiro, modelo novo | ⏳ **Medida, não implementada.** Falta baixar o pico de VRAM (ver "Medido") |
 | 4 a 9 | ⏳ não começadas |
 
-**Próximo passo:** implementar as etapas 2 e 3 no motor novo (`[whisper] motor = "novo"`), com o pico de VRAM abaixo
-de 6 GB, e medir de novo na bancada.
+**Próximo passo (o Lucas autorizou em 06/11: "pode implementar"):** etapas 2 e 3 no app, com este desenho:
+
+- `scriba/motor_novo.py` (novo): `WordTranscriber(Transcriber)` (o mesmo Whisper, com `word_timestamps=True` no lote
+  e no modo normal, guardando as palavras no segmento); `assign_words(segments, turns)` com a mesma assinatura de
+  `diarize.assign_speakers` (voz pelo meio da palavra; fala nova onde a voz muda ou há pausa > 1,5 s); e a separação
+  de vozes pelo `diarize.diarize` de sempre (pedaços de 3 min), trocando só o modelo para o `community-1` e usando o
+  modo exclusivo quando ele vier. Depois, na bancada: pedaços × inteiro com o `community-1`.
+- `config.py`: `[whisper] motor = "classico" | "novo"` (padrão `classico`) e `[diarization] model_novo =
+  "pyannote/speaker-diarization-community-1"`, também no modelo do `config.toml` que o app escreve.
+- `pipeline.transcribe_folder`: só dois desvios quando `motor = "novo"` (qual transcritor, qual atribuição). Cadastro
+  de voz, junção, notas e resumo seguem iguais. Motor da Apple, nuvem e MLX não dão palavras: ficam no clássico.
+- Testes em `tests/test_motor_novo.py` (`assign_words` é função pura) e o pipeline rodado numa CÓPIA da pasta da
+  gravação de 05/11 (o pipeline escreve na pasta), conferindo `transcript.json` contra o gabarito.
+- Git: `origin` = `git@github-lpeixe:L-Peixe/ScribaFish.git` (fork público, `main` = 1.4.27), e-mail local
+  `lucaspquimico@gmail.com` (blueprint FREELAS §4.2); push para o `upstream` desligado. PR **dentro do ScribaFish**
+  (base `main`), nunca no repositório do Allan. Não há token do GitHub da L-Peixe: o push vai por SSH e o PR o Lucas
+  abre pelo link, ou passa um token.
 
 ## Medido
 
@@ -29,7 +44,10 @@ de 6 GB, e medir de novo na bancada.
 
 O modo exclusivo do `community-1` deu o mesmo 17 de 17. **Vozes: 125 s para 27 min, com pico de 8,9 GB de VRAM numa
 placa de 6 GB:** transbordou para a memória do sistema (o Windows deixa), e é esse transbordo que o ScribaDev evita
-com os pedaços de 3 min. Antes de ligar, reduzir o lote de embeddings do pyannote e medir de novo.
+com os pedaços de 3 min. **Lote menor não resolve:** com o lote padrão (32/32) foram 127 s e 8,94 GB; com 8/8 a mesma
+separação passou de 60 min sem terminar e foi parada (causa não isolada). Por isso o motor novo usa os **pedaços de 3 min**
+que o ScribaDev já tem (blindados contra estouro), agora com o `community-1` e a voz por palavra; pedaços × áudio
+inteiro se mede na bancada antes de mudar.
 
 ## Por que o fork
 
