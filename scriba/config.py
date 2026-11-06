@@ -122,6 +122,9 @@ vad_filter = true
 # ou deixe o "Assistente de perfil…" (Configurações → IA) montar a lista.
 hotwords = ""
 vocab_fix = true                   # corrige a grafia dos termos do vocabulário na transcrição ("S 80" -> SE80)
+# Motor do fork: "novo" = hora de cada palavra + voz por palavra + modelo de vozes
+# [diarization] model_novo; "classico" = o de sempre. Só vale para o Whisper local.
+motor = "classico"
 {_H["engine"]}
 engine = "local"
 live = false                       # só engine=apple: transcreve durante a call (ao fim, só vozes + resumo)
@@ -136,6 +139,7 @@ cloud_model = "whisper-large-v3-turbo"
 enabled = false
 hf_token = ""
 model = "pyannote/speaker-diarization-3.1"
+model_novo = "pyannote/speaker-diarization-community-1"   # modelo de vozes do [whisper] motor = "novo"
 max_speakers = 0         # 0 = automático (máx. de vozes; ajuda o pyannote a não inventar)
 min_speakers = 0         # 0 = automático (mín. de vozes; evita colapsar 2 remotos em 1)
 # Ao fim da call, perguntar nº de participantes (vozes remotas) numa janela e
@@ -242,6 +246,9 @@ class Whisper:
     # de objeto customizado, se o vocabulário for de SAP); vale p/ qualquer motor,
     # essencial no da Apple (que ignora o vocabulário)
     vocab_fix: bool = True
+    # Motor do fork (scriba/motor_novo.py): "novo" = hora de cada palavra, voz por palavra e
+    # o modelo de vozes [diarization] model_novo. "classico" = o de sempre. Só o Whisper local.
+    motor: str = "classico"
     engine: str = "local"              # local (Whisper) | apple (macOS 26+) | cloud (Groq/OpenAI-compat STT)
     # Só com engine=apple: transcreve DURANTE a call; ao fim só faltam vozes + resumo (#222)
     live: bool = False
@@ -255,6 +262,8 @@ class Diarization:
     enabled: bool = False
     hf_token: str = ""
     model: str = "pyannote/speaker-diarization-3.1"
+    # modelo de vozes do motor novo: separa quem fala pouco, que o 3.1 funde com outra voz
+    model_novo: str = "pyannote/speaker-diarization-community-1"
     max_speakers: int = 0
     min_speakers: int = 0
     # Ao fim de cada call, perguntar quantos participantes remotos houve e travar
@@ -452,6 +461,7 @@ vad_filter = {_b(w.vad_filter)}        # transcrever só trechos com fala (Siler
 # Vocabulário para guiar a transcrição (o jargão da sua área; vazio = sem viés):
 hotwords = {_s(w.hotwords)}
 vocab_fix = {_b(w.vocab_fix)}          # corrige a grafia dos termos do vocabulário na transcrição
+motor = {_s(w.motor)}          # classico | novo (voz por palavra; só o Whisper local)
 engine = {_s(w.engine)}          # {_H["engine_save"]}
 live = {_b(w.live)}                  # só engine=apple: transcreve durante a call
 cloud_base_url = {_s(w.cloud_base_url)}   # vazio = Groq (.../openai/v1)
@@ -465,6 +475,7 @@ cloud_model = {_s(w.cloud_model)}
 enabled = {_b(dz.enabled)}
 hf_token = {_s(_maybe_protect(dz.hf_token, "diarization.hf_token"))}
 model = {_s(dz.model)}
+model_novo = {_s(dz.model_novo)}   # modelo de vozes do [whisper] motor = "novo"
 max_speakers = {_n(dz.max_speakers)}         # 0 = automático (máx. de vozes)
 min_speakers = {_n(dz.min_speakers)}         # 0 = automático (mín. de vozes)
 # Ao fim da call, perguntar nº de participantes (vozes remotas) e travar a
