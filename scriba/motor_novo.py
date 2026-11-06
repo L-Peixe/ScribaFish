@@ -46,9 +46,11 @@ def ativo(cfg: Whisper, force_cpu: bool = False) -> bool:
 
 
 def diarization_cfg(cfg: Diarization) -> Diarization:
-    """A configuração de vozes do motor novo: a mesma, com o modelo `model_novo`."""
-    modelo = (getattr(cfg, "model_novo", "") or "").strip()
-    return dataclasses.replace(cfg, model=modelo) if modelo else cfg
+    """A configuração de vozes do motor novo: a mesma, com o modelo `model_novo` e, na
+    redução das vozes ao nº informado, o eco/ruído de poucos segundos saindo primeiro
+    (call de 05/11: uma voz de 17 s fazia a redução fundir a pessoa que fala pouco)."""
+    modelo = (getattr(cfg, "model_novo", "") or "").strip() or cfg.model
+    return dataclasses.replace(cfg, model=modelo, reduce_small_first=True)
 
 
 class WordTranscriber(Transcriber):

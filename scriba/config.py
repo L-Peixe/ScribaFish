@@ -276,6 +276,9 @@ class Diarization:
     # O nº de vozes informado ao fim da call vale aqui também (#198): teto por bloco
     # e redução das vozes re-ligadas a esse número no fim.
     chunk_minutes: int = 3
+    # Motor novo do fork (ligado por motor_novo.diarization_cfg, não pelo config.toml): na
+    # redução das vozes ao nº informado, a voz com < 5% da fala (eco/ruído) sai primeiro
+    reduce_small_first: bool = False
     # Notebook na bateria: a nota sai na hora SEM separar vozes, e a separação roda
     # sozinha quando voltar à tomada (é a etapa mais pesada: GPU quente por minutos).
     # Desktop não tem bateria e ignora.

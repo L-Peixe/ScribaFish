@@ -145,7 +145,50 @@ class ChaveTests(unittest.TestCase):
         novo = motor_novo.diarization_cfg(dz)
         self.assertEqual(novo.model, "pyannote/speaker-diarization-community-1")
         self.assertEqual((novo.enabled, novo.hf_token, novo.chunk_minutes), (True, "t", 3))
+        self.assertTrue(novo.reduce_small_first)
+        self.assertFalse(dz.reduce_small_first)  # o clássico segue com a redução de sempre
         self.assertEqual(motor_novo.diarization_cfg(config.Diarization(model_novo="")).model, dz.model)
+
+
+class ReducaoTests(unittest.TestCase):
+    """A redução das vozes ao nº informado, no caso da call de 05/11 (medido em 06/11):
+    três pessoas re-ligadas certo entre os pedaços e uma 4ª voz de 17 s, sem parecença
+    com ninguém. O par mais parecido era a pessoa que fala pouco com a que fala muito."""
+
+    @staticmethod
+    def _globais():
+        import numpy as np
+
+        bruno = np.array([1.0, 0.0, 0.0, 0.0], np.float32)
+        azai = np.array([0.0, 1.0, 0.0, 0.0], np.float32)
+        gabi = np.array([0.26, 0.0, 0.97, 0.0], np.float32)   # cosseno 0,26 com o Bruno
+        eco = np.array([0.0, 0.1, 0.0, 1.0], np.float32)      # ~0,1 com todo mundo
+        g = [[bruno, 2, "G0"], [azai, 2, "G1"], [gabi, 3, "G2"], [eco, 2, "G3"]]
+        dur = {"G0": 332.0, "G1": 109.0, "G2": 129.0, "G3": 17.0}
+        return g, dur
+
+    def test_classico_funde_a_pessoa_que_fala_pouco(self):
+        from scriba import diarize
+
+        g, _dur = self._globais()
+        mapa = diarize._reduce_globals_to(g, 3)
+        self.assertEqual(mapa, {"G2": "G0"})
+
+    def test_motor_novo_tira_o_eco_primeiro(self):
+        from scriba import diarize
+
+        g, dur = self._globais()
+        mapa = diarize._reduce_globals_to(g, 3, durations=dur)
+        self.assertEqual(list(mapa), ["G3"])
+        self.assertEqual(sorted(gid for _c, _n, gid in g), ["G0", "G1", "G2"])
+
+    def test_voz_real_pequena_mas_acima_do_limite_segue_pelo_par(self):
+        # 5% é o corte: uma voz com 10% da fala é gente, e a redução volta ao par mais parecido
+        from scriba import diarize
+
+        g, dur = self._globais()
+        dur["G3"] = 70.0
+        self.assertEqual(diarize._reduce_globals_to(g, 3, durations=dur), {"G2": "G0"})
 
 
 class PipelineTests(unittest.TestCase):

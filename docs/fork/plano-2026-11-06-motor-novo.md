@@ -8,27 +8,28 @@
 | Etapa | Estado |
 |---|---|
 | 1. Bancada | ✅ `bancada/vozes_por_palavra.py` e o 1º gabarito (call de 27 min). ⏳ Faltam os gabaritos da gravação de celular de 1h29 e da call de 48 min |
-| 2. Voz por palavra | ⏳ **Medida, não implementada no app.** Resultado abaixo |
-| 3. Vozes no áudio inteiro, modelo novo | ⏳ **Medida, não implementada.** Falta baixar o pico de VRAM (ver "Medido") |
-| 4 a 9 | ⏳ não começadas |
+| 2. Voz por palavra | ✅ no app, atrás de `[whisper] motor = "novo"` (`scriba/motor_novo.py`) |
+| 3. Vozes com o modelo novo | ✅ `community-1` (`[diarization] model_novo`) pelos pedaços de 3 min de sempre, com a redução de vozes corrigida. 🚫 Áudio inteiro: não precisa (os pedaços deram 17 de 17 com 1,6 GB; o inteiro pede 8,9 GB) |
+| 4 a 8 | ⏳ não começadas (avaliado em 06/11) |
+| 9. GitHub pessoal | ✅ `L-Peixe/ScribaFish` (ver "Git") |
 
-**Próximo passo (o Lucas autorizou em 06/11: "pode implementar"):** etapas 2 e 3 no app, com este desenho:
+**Como o motor novo está ligado:** `scriba/motor_novo.py` tem o `WordTranscriber` (o Transcriber de sempre pedindo
+`word_timestamps=True`, pelo gancho `Transcriber._extra_kwargs()`), o `assign_words` (mesma assinatura de
+`diarize.assign_speakers`: voz pelo meio da palavra, o turno mais curto na sobreposição, a voz da vizinha na fresta,
+fala nova onde a voz muda ou há pausa > 1,5 s) e o `diarization_cfg` (troca o modelo e liga `reduce_small_first`). O
+`pipeline.transcribe_folder` desvia em dois pontos quando `motor_novo.ativo()`; cadastro de voz, junção, notas e resumo
+seguem iguais. Motor da Apple, nuvem e MLX não dão palavras e ficam no clássico. No `diarize.py` do Allan, só a redução
+das vozes ao nº informado ganhou o ramo `durations` (voz com < 5% da fala sai primeiro), desligado no clássico. O modo
+exclusivo do `community-1` **não** é usado: na bancada deu o mesmo 17 de 17, e usá-lo pedia mexer mais no `diarize.py`.
 
-- `scriba/motor_novo.py` (novo): `WordTranscriber(Transcriber)` (o mesmo Whisper, com `word_timestamps=True` no lote
-  e no modo normal, guardando as palavras no segmento); `assign_words(segments, turns)` com a mesma assinatura de
-  `diarize.assign_speakers` (voz pelo meio da palavra; fala nova onde a voz muda ou há pausa > 1,5 s); e a separação
-  de vozes pelo `diarize.diarize` de sempre (pedaços de 3 min), trocando só o modelo para o `community-1` e usando o
-  modo exclusivo quando ele vier. Depois, na bancada: pedaços × inteiro com o `community-1`.
-- `config.py`: `[whisper] motor = "classico" | "novo"` (padrão `classico`) e `[diarization] model_novo =
-  "pyannote/speaker-diarization-community-1"`, também no modelo do `config.toml` que o app escreve.
-- `pipeline.transcribe_folder`: só dois desvios quando `motor = "novo"` (qual transcritor, qual atribuição). Cadastro
-  de voz, junção, notas e resumo seguem iguais. Motor da Apple, nuvem e MLX não dão palavras: ficam no clássico.
-- Testes em `tests/test_motor_novo.py` (`assign_words` é função pura) e o pipeline rodado numa CÓPIA da pasta da
-  gravação de 05/11 (o pipeline escreve na pasta), conferindo `transcript.json` contra o gabarito.
-- Git: `origin` = `git@github-lpeixe:L-Peixe/ScribaFish.git` (fork público, `main` = 1.4.27), e-mail local
-  `lucaspquimico@gmail.com` (blueprint FREELAS §4.2); push para o `upstream` desligado. PR **dentro do ScribaFish**
-  (base `main`), nunca no repositório do Allan. Não há token do GitHub da L-Peixe: o push vai por SSH e o PR o Lucas
-  abre pelo link, ou passa um token.
+**Próximo passo:** o app que grava as calls roda o código de `../REPO` (instalação editável no venv do ScribaDev). Para
+o motor novo valer no dia a dia, o Lucas decide apontar o app para o fork e ligar `motor = "novo"`; depois, a etapa 4
+(os três modos de velocidade).
+
+**Git:** `origin` = `git@github-lpeixe:L-Peixe/ScribaFish.git` (push pela chave SSH da L-Peixe, blueprint FREELAS
+§4.2), e-mail local `lucaspquimico@gmail.com`, push para o `upstream` desligado. PR **dentro do ScribaFish** (base
+`main`), nunca no repositório do Allan. O `gh` e o Chrome estão logados como `devsummus`: o PR o Lucas abre pelo link
+(ou passa um token da L-Peixe, que se revoga depois).
 
 ## Medido
 
@@ -42,12 +43,24 @@
 | `community-1` × bloco inteiro | 14 de 17 | sim |
 | **`community-1` × palavra** | **17 de 17** | **sim** (84 falas no texto, contra 24 blocos do ScribaDev) |
 
-O modo exclusivo do `community-1` deu o mesmo 17 de 17. **Vozes: 125 s para 27 min, com pico de 8,9 GB de VRAM numa
-placa de 6 GB:** transbordou para a memória do sistema (o Windows deixa), e é esse transbordo que o ScribaDev evita
-com os pedaços de 3 min. **Lote menor não resolve:** com o lote padrão (32/32) foram 127 s e 8,94 GB; com 8/8 a mesma
-separação passou de 60 min sem terminar e foi parada (causa não isolada). Por isso o motor novo usa os **pedaços de 3 min**
-que o ScribaDev já tem (blindados contra estouro), agora com o `community-1` e a voz por palavra; pedaços × áudio
-inteiro se mede na bancada antes de mudar.
+O modo exclusivo do `community-1` deu o mesmo 17 de 17. **No áudio inteiro, as vozes pedem 8,9 GB de VRAM numa placa
+de 6 GB** (125 s para 27 min, transbordando para a memória do sistema), e lote menor não resolve: com 32/32, 127 s e
+8,94 GB; com 8/8, passou de 60 min e foi parada (causa não isolada). Por isso o motor novo usa os pedaços de 3 min.
+
+**06/11 — o pipeline do app (`transcribe_folder`) numa cópia da mesma call** (`bancada/pipeline_na_copia.py`):
+
+| Rodada | Falas certas | Pico de VRAM do pyannote | Tempo (2 trilhas) |
+|---|---|---|---|
+| App instalado (o que gravou a call: `3.1`, bloco inteiro) | 10 de 17 (tudo numa voz) | — | — |
+| Motor novo, pedaços de 3 min, redução de sempre | 14 de 17 (a pessoa que fala pouco se funde) | 1,6 GB | 152 s |
+| Motor novo, pedaços de 10 min | 14 de 17 | 1,6 GB | 149 s |
+| Motor novo, nº de vozes imposto em cada pedaço (3 e 10 min) | 14 de 17 | 1,6 GB | 142 s |
+| **Motor novo, pedaços de 3 min, voz pequena sai primeiro** | **17 de 17** | **1,6 GB** | **145 s** |
+
+**Por que os pedaços fundiam:** cada pedaço acha as três pessoas e a religação entre pedaços acerta (cosseno 0,92 a
+0,96 da mesma pessoa), mas sobra uma 4ª voz de 17 s (eco ou ruído; cosseno ~0,1 com todo mundo). A redução ao nº
+informado fundia o par mais parecido, que era a pessoa que fala pouco com a que fala muito (0,25), e a voz de 17 s
+ficava. No motor novo, a voz com menos de 5% da fala é fundida primeiro (`_reduce_globals_to(..., durations=)`).
 
 ## Por que o fork
 
@@ -87,8 +100,8 @@ inteiro com o nº de vozes, e o nome de cada voz dado pelo conteúdo.
 ## Regras do fork
 
 - **Base:** `upstream/main` do Allan (1.4.27 em 06/11), branch `motor-novo`. Remoto `upstream` =
-  `allanrmartins/ScribaDev` (público, MIT; manter o aviso de copyright dele). O remoto pessoal entra quando o Lucas
-  passar a conta.
+  `allanrmartins/ScribaDev` (público, MIT; manter o aviso de copyright dele), só para puxar as melhorias dele; o
+  `origin` é o ScribaFish (ver "Git").
 - **O ScribaDev instalado não é tocado:** ele roda de `../REPO` e segue gravando até o motor novo provar, com número,
   que é melhor nas mesmas reuniões.
 - **Código novo ao lado do antigo, atrás de chave:** `[whisper] motor = "classico" | "novo"`. Desfaz desligando a
@@ -102,10 +115,7 @@ Cada etapa mede na bancada antes de ligar: palavras, falas com a voz certa (gaba
 
 1. **Bancada de medição.** `bancada/vozes_por_palavra.py` + gabaritos locais: uma call de 27 min (3 vozes no
    loopback, falas atribuídas pelo conteúdo), uma gravação de celular de 1h29 (4 vozes nomeadas) e uma call de 48 min.
-2. **Voz por palavra.** Whisper com hora em cada palavra; a fala é cortada onde a voz muda ou há pausa; cada palavra
-   vai para a voz do turno que a contém. Substitui `assign_speakers` no motor novo.
-3. **Separação de vozes no áudio inteiro, com o modelo melhor** (`3.1` × `community-1`, este com o modo exclusivo:
-   uma voz por instante). Medir VRAM na 3050 em reunião de 1h+; pedaços só se não couber.
+2–3. ✅ feitas (ver "Status" e o changelog).
 4. **Os três modos de velocidade:** rápido (turbo em lote, com palavras), completo (o método do laboratório:
    `large-v3`, contexto, 2ª passada, defesas) e os dois em sequência (a nota rápida sai, a completa a substitui).
    Escolha na configuração e na janela do fim da call; "os dois" marcado.
@@ -118,7 +128,7 @@ Cada etapa mede na bancada antes de ligar: palavras, falas com a voz certa (gaba
 7. **Nome das vozes:** cadastro de voz primeiro; as que sobrarem, o Claude propõe pelo conteúdo, com os participantes
    do cliente; o Lucas confirma na tela de vozes.
 8. **Importar áudio de celular:** arrastar um arquivo → vira uma reunião de uma trilha, com o nº de pessoas.
-9. **GitHub pessoal:** remoto `origin` na conta do Lucas; o `upstream` fica para puxar as melhorias do Allan.
+9. ✅ feita (GitHub pessoal: ver "Git" no topo).
 
 ## Riscos
 
@@ -136,3 +146,7 @@ Cada etapa mede na bancada antes de ligar: palavras, falas com a voz certa (gaba
 - **2026-11-06** — criado. Diagnóstico medido (blocos, voz única, pedaços de 3 min, vocabulário fixo), decisões do
   Lucas, fork de `upstream/main` (1.4.27) na branch `motor-novo`. Bancada da etapa 1 rodada: `community-1` com voz
   por palavra acertou 17 de 17 falas, contra 13 do jeito de hoje.
+- **2026-11-06** — etapas 2 e 3 no app, atrás de `[whisper] motor = "novo"`: `scriba/motor_novo.py`, gancho
+  `Transcriber._extra_kwargs()`, dois desvios no pipeline, chaves `motor` e `model_novo`. A redução das vozes em pedaços
+  fundia a pessoa que fala pouco por causa de uma voz de eco de 17 s: no motor novo a voz pequena sai primeiro. Pipeline
+  real na call de 27 min: 17 de 17 (o app instalado, 10). Áudio inteiro cancelado: os pedaços bastam, com 1,6 GB.
