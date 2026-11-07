@@ -11,6 +11,7 @@
 | 2. Voz por palavra | ✅ no app, atrás de `[whisper] motor = "novo"` (`scriba/motor_novo.py`) |
 | 3. Vozes com o modelo novo | ✅ `community-1` (`[diarization] model_novo`) pelos pedaços de 3 min de sempre, com a redução de vozes corrigida. 🚫 Áudio inteiro: não precisa (os pedaços deram 17 de 17 com 1,6 GB; o inteiro pede 8,9 GB) |
 | 4, 6, 7, 8 | ⏳ não começadas (avaliado em 06/11) |
+| 10. Para outras pessoas usarem | ⏳ não começada (avaliado em 07/11): Mac, Atualizar pelo ScribaFish, cadastro da voz pela tela, instalação |
 | 5. Vozes no microfone | ✅ no app atrás de `motor = "novo"` e de 2+ pessoas no mic (ver "Vozes no microfone" abaixo); call de 05/11 19h58: 14 de 15 falas com o nome certo |
 | 9. GitHub pessoal | ✅ `L-Peixe/ScribaFish` (ver "Git") |
 
@@ -150,6 +151,10 @@ inteiro com o nº de vozes, e o nome de cada voz dado pelo conteúdo.
   `allanrmartins/ScribaDev` (público, MIT; manter o aviso de copyright dele), só para **ler** o que ele fez quando o
   Lucas pedir; nada do Allan entra sem pedido do Lucas e PR com teste (decisão de 07/11). O `origin` é o ScribaFish
   (ver "Git").
+- **O fork é para qualquer pessoa, Windows e Mac** (Lucas, 07/11: *"não quero que você faça esse projeto todo pensando
+  só na minha máquina… o fork é para funcionar com qualquer pessoa, né? Inclusive sistemas Mac. Pois eu quero passar
+  isso depois para a Giovanna e para o Bruno"*). O que é só da máquina do Lucas fica no config e nos dados dele
+  (`%LOCALAPPDATA%\ScribaDev`), nunca no código; o que precisar de comando vira tela para quem não usa terminal.
 - **A pasta do app (`../APP`) não se edita:** é de onde roda o ScribaDev que grava as calls (ver "De onde o app roda").
   Uma etapa só chega nela depois de medida na bancada e mergeada.
 - **Código novo ao lado do antigo, atrás de chave:** `[whisper] motor = "classico" | "novo"`. Desfaz desligando a
@@ -178,6 +183,14 @@ Cada etapa mede na bancada antes de ligar: palavras, falas com a voz certa (gaba
    do cliente; o Lucas confirma na tela de vozes.
 8. **Importar áudio de celular:** arrastar um arquivo → vira uma reunião de uma trilha, com o nº de pessoas.
 9. ✅ feita (GitHub pessoal: ver "Git" no topo).
+10. **Para outras pessoas usarem** (Giovana e Bruno, no Mac; avaliado em 07/11, não começada):
+    - **Mac:** no Mac com chip Apple o app usa o MLX, que hoje não devolve a hora das palavras para o motor novo
+      (`motor_novo.ativo` exige o faster-whisper). Lá o motor novo e a pergunta do microfone não aparecem. O
+      `mlx-whisper` aceita `word_timestamps`: falta ligar e medir.
+    - **Atualizar:** o botão compara a versão com o manifesto do Allan; para quem instalar do ScribaFish, ele precisa
+      olhar o `main` do ScribaFish.
+    - **Cadastrar a própria voz** pela tela, não pelo comando `cadastrar-eu`.
+    - **Instalação** a partir do ScribaFish, com o passo a passo para Windows e Mac.
 
 ## Riscos
 
@@ -217,3 +230,5 @@ Cada etapa mede na bancada antes de ligar: palavras, falas com a voz certa (gaba
   pedido e por PR com teste.
 - **2026-11-07** — PR #3 mergeado e puxado na `APP`; a voz do Lucas entrou no cadastro como "Eu" pelas calls de 28/10,
   13/10 e 23/10 (as três bateram entre si; parecença com as outras vozes cadastradas de 0,19 a 0,26).
+- **2026-11-07** — regra nova: o fork é para qualquer pessoa, Windows e Mac. Entrou a etapa 10 (o que falta para a
+  Giovana e o Bruno usarem; o motor novo hoje não roda no Mac com MLX).
