@@ -32,12 +32,18 @@ grava é a voz que mais fala entre as **não reconhecidas**; o resto vira "Pesso
 (com `"mic": true`) para o "Quem é cada voz?" nomear. O cadastro **não tem a voz do Lucas** (o app nunca cadastra o
 "Eu"); na call de 05/11 quem resolveu foi a Giovana reconhecida (parecença 0,83), porque ela falou mais que o Lucas
 (305 s × 265 s): pelo critério de "quem mais fala", sem o cadastro dela, os dois sairiam trocados. A entrada "Eu" é ignorada
-no loopback. Com 1 pessoa no mic ou motor clássico, nada muda. O "Eu" no cadastro ainda não tem como ser criado (pendente).
+no loopback. Com 1 pessoa no mic ou motor clássico, nada muda. O "Eu" entra no cadastro por um comando de uma vez
+(decisão do Lucas, 07/11), `scribadev cadastrar-eu PASTA... [--conferir]` (`motor_novo.cadastrar_eu`): lê só o microfone
+de calls antigas, separa as vozes sem travar o número e cadastra a principal, pulando a pasta em que outra voz tem mais
+de 15% da fala, a que o cadastro reconhece como outra pessoa e a que não bate com o "Eu" já cadastrado. Só cadastrar
+com o `APP` já atualizado: o código de antes da etapa 5 não sabe que o "Eu" é do mic e poderia dá-lo a uma voz do loopback.
 
 **De onde o app roda:** o app que grava as calls roda do `../APP`, um clone do `main` do ScribaFish (instalação
 editável no venv do ScribaDev: `pip install -e ../APP --no-deps`), com `motor = 'novo'` no
-`%LOCALAPPDATA%\ScribaDev\config.toml`. A `APP` não se edita: ela só muda com PR mergeado + o botão "Atualizar" do app
-(`git pull --ff-only` nela). O trabalho em andamento fica na `FORK` e nunca chega às calls. **Desfazer:**
+`%LOCALAPPDATA%\ScribaDev\config.toml`. A `APP` não se edita: ela só muda com PR mergeado + o Lucas rodando
+`git pull --ff-only` nela e reabrindo o app. O botão "Atualizar" **não** traz os PRs do ScribaFish: ele compara o número
+da versão com o do repositório do Allan (`updates.REPO`) e, com os dois em 1.4.27, responde "já está na versão mais
+recente" (07/11, depois do merge do PR #2). O trabalho em andamento fica na `FORK` e nunca chega às calls. **Desfazer:**
 `pip install -e ../REPO --no-deps` no venv e `motor = 'classico'`; o `../REPO` (1.4.21, do Allan) ficou intacto, e a cópia
 dos bancos e do config de antes da troca está em `%LOCALAPPDATA%\ScribaDev\backup-2026-11-06-antes-do-fork`.
 
@@ -45,10 +51,12 @@ dos bancos e do config de antes da troca está em `%LOCALAPPDATA%\ScribaDev\back
 
 **Git:** `origin` = `git@github-lpeixe:L-Peixe/ScribaFish.git` (push pela chave SSH da L-Peixe, blueprint FREELAS
 §4.2), e-mail local `lucaspquimico@gmail.com`, push para o `upstream` desligado. PR **dentro do ScribaFish** (base
-`main`), nunca no repositório do Allan. O `gh` e o Chrome estão logados como `devsummus`: o PR o Lucas abre pelo link
-`compare/main...<branch>` (ou passa um token da L-Peixe, que se revoga depois). **Versões do Allan:** o Lucas clica em
-"Sync fork" no GitHub do ScribaFish; se conflitar com o motor novo, o GitHub recusa e ele chama o Claude. O aviso de
-versão nova do app continua vindo do manifesto do Allan, mas o "Atualizar" só traz o que já está no ScribaFish.
+`main`), nunca no repositório do Allan. O `gh` e o Chrome estão logados como `devsummus`: o Claude abre o PR com o
+token da L-Peixe (blueprint FREELAS §4.2); o Auto-fix desses PRs o app não liga. **Versões do Allan: não entram**
+(decisão do Lucas, 07/11). Nunca o "Sync fork" do GitHub (é o único caminho pelo qual o código dele chegaria ao
+ScribaFish); algo dele que interesse entra a pedido do Lucas, num PR com teste. O app ainda lê o manifesto do Allan
+(`updates.MANIFEST_URL`) só para o aviso de versão nova; quando ele publica uma, o "Atualizar" faz `git pull` do
+**ScribaFish**, nunca do Allan.
 
 ## Medido
 
@@ -129,19 +137,23 @@ inteiro com o nº de vozes, e o nome de cada voz dado pelo conteúdo.
 - **Nome das vozes:** voz cadastrada primeiro; o Claude propõe as demais pelo conteúdo e o Lucas confirma.
 - **Motor novo no dia a dia:** *"Sim, aponta"*. De onde roda: *"Pasta própria APP"* (não direto na `FORK`, para o
   trabalho em andamento não chegar às calls).
-- **Versões do Allan:** *"Você clica em Sync fork"* (não um PR com teste antes).
+- **Versões do Allan:** *"Você clica em Sync fork"* (não um PR com teste antes). **Substituída em 07/11:** *"eu não
+  quero que fique sendo puxado as coisas do Alan mais não, tá? Por uma questão de segurança. Se eu ver alguma
+  necessidade de alguma coisa que ele trouxe que pode ser interessante para a gente… ótimo. Mas eu quero uma distância
+  segura disso"*. Nada de "Sync fork"; o que interessar do Allan entra a pedido do Lucas, num PR com teste.
 - **Lista de termos (`hotwords`):** *"A agora, B depois"*: esvaziada no config do app em 06/11 (no silêncio do mic o
   Whisper devolvia a lista em laço); a defesa no motor entra com a etapa 6.
 
 ## Regras do fork
 
 - **Base:** `upstream/main` do Allan (1.4.27 em 06/11); cada etapa numa branch + PR no ScribaFish. Remoto `upstream` =
-  `allanrmartins/ScribaDev` (público, MIT; manter o aviso de copyright dele), só para puxar as melhorias dele; o
-  `origin` é o ScribaFish (ver "Git").
+  `allanrmartins/ScribaDev` (público, MIT; manter o aviso de copyright dele), só para **ler** o que ele fez quando o
+  Lucas pedir; nada do Allan entra sem pedido do Lucas e PR com teste (decisão de 07/11). O `origin` é o ScribaFish
+  (ver "Git").
 - **A pasta do app (`../APP`) não se edita:** é de onde roda o ScribaDev que grava as calls (ver "De onde o app roda").
   Uma etapa só chega nela depois de medida na bancada e mergeada.
 - **Código novo ao lado do antigo, atrás de chave:** `[whisper] motor = "classico" | "novo"`. Desfaz desligando a
-  chave. Isso também mantém fácil trazer as atualizações do Allan.
+  chave.
 - **Conteúdo de reunião nunca entra no git.** A bancada (`bancada/`) é código; gabaritos e áudios ficam em
   `LAB-TRANSCRICAO/gabarito/` e nas pastas de gravação.
 
@@ -151,15 +163,10 @@ Cada etapa mede na bancada antes de ligar: palavras, falas com a voz certa (gaba
 
 1. **Bancada de medição.** `bancada/vozes_por_palavra.py` + gabaritos locais: uma call de 27 min (3 vozes no
    loopback, falas atribuídas pelo conteúdo), uma gravação de celular de 1h29 (4 vozes nomeadas) e uma call de 48 min.
-2–3. ✅ feitas (ver "Status" e o changelog).
+2–3, 5. ✅ feitas (ver "Status" e o changelog).
 4. **Os três modos de velocidade:** rápido (turbo em lote, com palavras), completo (o método do laboratório:
    `large-v3`, contexto, 2ª passada, defesas) e os dois em sequência (a nota rápida sai, a completa a substitui).
    Escolha na configuração e na janela do fim da call; "os dois" marcado.
-5. **Vozes no microfone:** a janela do fim da call pergunta quantas pessoas do outro lado e do seu lado; com mais de
-   uma do seu lado, o microfone também passa pela separação, e a voz do Lucas é reconhecida pelo cadastro. **Caso
-   real para medir:** call de 05/11 19h58 (35 min), o Lucas e a Giovana no mesmo microfone e a Roberta do outro lado;
-   hoje o app põe tudo do mic como "Eu". Áudio copiado em `LAB-TRANSCRICAO/gabarito/audio/2026-11-05-roberta-mic-com-2/`;
-   falta o gabarito (falas de cada um no mic). A Giovana já está no cadastro de vozes do app (`speakers.json`).
 6. **Clientes e vocabulário:** na configuração inicial, o Claude (CLI, assinatura do Lucas) lê a pasta de trabalho
    (ex.: a pasta onde ficam os repositórios), propõe um cliente por repositório/pasta com nomes e termos; o Lucas revisa. No fim da call,
    marca um ou mais clientes; o contexto e os nomes deles entram no `initial_prompt` (não em `hotwords`: o eco da lista,
@@ -202,3 +209,9 @@ Cada etapa mede na bancada antes de ligar: palavras, falas com a voz certa (gaba
 - **2026-11-07** — etapa 5 no app, atrás do motor novo: a janela do fim da call pergunta as pessoas no mic, o mic com 2+
   passa pela separação, a voz de quem grava segue "Eu". Call de 05/11 19h58: 14 de 15 falas do mic com o nome certo,
   contra 5 do app instalado. Achado: o cadastro de vozes não tem a voz do Lucas.
+- **2026-11-07** — PR #2 mergeado. Comando `cadastrar-eu` para pôr a voz do Lucas no cadastro como "Eu". Conferido em
+  5 calls (18 min de placa): 3 servem (28/10 16h08, 13/10 16h03, 23/10 10h01); a de 05/11 19h58 foi recusada (outra voz
+  com 272 s de 570 s: a Giovana) e a de 04/11 12h14 também (215 s de 753 s). Corrigido o "De onde o app roda": o
+  "Atualizar" não traz os PRs do ScribaFish (compara a versão com a do Allan); a `APP` se atualiza com `git pull`.
+- **2026-11-07** — decisão do Lucas: as versões do Allan não entram mais (nada de "Sync fork"); o que interessar dele, a
+  pedido e por PR com teste.
