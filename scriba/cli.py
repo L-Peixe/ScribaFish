@@ -116,6 +116,8 @@ def main(argv: list[str] | None = None) -> int:
     p_tr.add_argument("--cpu", action="store_true", help="força transcrição em CPU")
     p_tr.add_argument("--speakers", type=int, default=None, metavar="N",
                       help="nº de participantes remotos: trava a diarização em N vozes (persiste no meta)")
+    p_tr.add_argument("--speakers-mic", type=int, default=None, metavar="N",
+                      help="pessoas no microfone, contando você (motor novo): com 2+, separa as vozes do mic")
 
     p_su = sub.add_parser("summarize", help="(re)gera o resumo e o notas.md de uma pasta de reunião")
     p_su.add_argument("folder", type=Path)
@@ -129,6 +131,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_proc.add_argument("--speakers", type=int, default=None, metavar="N",
                         help="nº de participantes remotos: trava a diarização em N vozes (persiste no meta)")
+    p_proc.add_argument("--speakers-mic", type=int, default=None, metavar="N",
+                        help="pessoas no microfone, contando você (motor novo): com 2+, separa as vozes do mic")
     p_proc.add_argument("--cpu", action="store_true",
                         help="força transcrição E diarização em CPU (#115: recuperação pós-erro de GPU)")
 
@@ -277,7 +281,8 @@ def main(argv: list[str] | None = None) -> int:
         from .pipeline import transcribe_folder
 
         try:
-            return transcribe_folder(args.folder, force_cpu=args.cpu, num_speakers=args.speakers)
+            return transcribe_folder(args.folder, force_cpu=args.cpu, num_speakers=args.speakers,
+                                     num_speakers_mic=args.speakers_mic)
         finally:
             idlewatch.disarm()  # sentinela de travamento (#188): fecha o hang.log
     if args.cmd == "summarize":
@@ -312,8 +317,8 @@ def main(argv: list[str] | None = None) -> int:
 
             if args.when_ready:
                 return process_when_ready(args.folder)
-            return 0 if process_folder(args.folder, force_cpu=args.cpu,
-                                       num_speakers=args.speakers) else 1
+            return 0 if process_folder(args.folder, force_cpu=args.cpu, num_speakers=args.speakers,
+                                       num_speakers_mic=args.speakers_mic) else 1
         except OSError as e:
             # componentes danificados (#170): traceback cru de PermissionError
             # não diz nada ao usuário - troca por orientação e rc próprio

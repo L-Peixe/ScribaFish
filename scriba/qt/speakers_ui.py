@@ -33,6 +33,9 @@ from . import theme, widgets
 
 log = logging.getLogger("scriba.qt.speakers_ui")
 
+# voz sem nome: "Participante N" (loopback) ou "Pessoa no mic N" (motor novo, 2+ pessoas no mic)
+_ANON = ("Participante ", "Pessoa no mic ")
+
 
 def has_labelable_voices(folder) -> bool:
     """True se a pasta da gravação tem vozes (voices.json) para rotular (#1)."""
@@ -54,10 +57,11 @@ def voice_label_state(folder) -> str:
 
     Uma voz conta como resolvida se foi reconhecida na hora (`auto`), rotulada à mão
     (`labeled`, que o `notes.relabel_speakers` grava no voices.json) ou já tem nome
-    próprio (rótulo que não começa por "Participante ").
+    próprio (rótulo que não começa por "Participante " nem, no motor novo, por "Pessoa no mic ").
 
-    O voices.json guarda SÓ as vozes do loopback (os OUTROS participantes, nunca o seu
-    mic) — por isso 1 voz já é um participante real (não "só você"): basta ela existir."""
+    O voices.json guarda SÓ os OUTROS participantes, nunca "Eu" (no motor novo, com 2+
+    pessoas no mic, entram também as outras vozes do mic) — por isso 1 voz já é um
+    participante real (não "só você"): basta ela existir."""
     try:
         voices = json.loads((Path(folder) / "voices.json").read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -68,7 +72,7 @@ def voice_label_state(folder) -> str:
     def _resolved(label, info) -> bool:
         info = info or {}
         return bool(info.get("auto") or info.get("labeled")
-                    or not str(label).startswith("Participante "))
+                    or not str(label).startswith(_ANON))
 
     any_labeled = any((info or {}).get("labeled") for info in voices.values())
     has_unresolved = any(not _resolved(k, v) for k, v in voices.items())
@@ -88,12 +92,17 @@ def _center_on_screen(win: QWidget, div_y: int = 3) -> None:
 
 
 class AskNumSpeakers(QWidget):
-    """Janela "Quantas vozes?" — chama on_result(int|None) EXATAMENTE uma vez."""
+    """Janela "Quantas vozes?" — chama on_result(int|None) EXATAMENTE uma vez.
+
+    Com `on_mic` (motor novo do fork), pergunta também quantas pessoas estão no seu
+    microfone, contando você (padrão 1), e chama on_mic(int ≥ 1) logo antes de on_result,
+    em qualquer saída (confirmar, automático, tempo esgotado, X)."""
 
     def __init__(self, on_result: Callable[[int | None], None], last_value: int | None = None,
-                 timeout_seconds: int = 90):
+                 timeout_seconds: int = 90, on_mic: Callable[[int], None] | None = None):
         super().__init__()
         self._on_result = on_result
+        self._on_mic = on_mic
         self._done = False
         self._left = int(timeout_seconds or 0)
 
@@ -120,6 +129,23 @@ class AskNumSpeakers(QWidget):
         self._entry.textChanged.connect(self._sync_confirm)
         self._entry.returnPressed.connect(self._confirm)
         lay.addWidget(self._entry)
+
+        self._mic_entry: QLineEdit | None = None
+        if on_mic is not None:
+            mq = QLabel("E no seu microfone, quantas pessoas, contando você?")
+            mq.setStyleSheet("font-weight:bold;"); mq.setWordWrap(True)
+            lay.addWidget(mq)
+            msub = QLabel("Mais de 1 quando alguém fala do seu lado, no mesmo microfone: "
+                          "as vozes dele também são separadas.")
+            msub.setProperty("role", "muted"); msub.setWordWrap(True)
+            msub.setStyleSheet(f"font-size:{theme.active().font_size_small}pt;")
+            lay.addWidget(msub)
+            self._mic_entry = QLineEdit("1")
+            self._mic_entry.setValidator(QRegularExpressionValidator(QRegularExpression(r"\d{0,2}")))
+            self._mic_entry.setAlignment(Qt.AlignCenter)
+            self._mic_entry.setStyleSheet(f"font-size:{theme.zpt(16)}pt; font-weight:bold;")
+            self._mic_entry.returnPressed.connect(self._confirm)
+            lay.addWidget(self._mic_entry)
 
         btns = QHBoxLayout()
         self._confirm_btn = widgets.ModernButton("Confirmar", self._confirm, kind="primary")
@@ -161,12 +187,24 @@ class AskNumSpeakers(QWidget):
         self._hint.setText(f"Sem resposta em {self._left}s → modo automático.")
         self._left -= 1
 
+    def _mic_value(self) -> int:
+        s = self._mic_entry.text().strip() if self._mic_entry is not None else ""
+        return int(s) if s.isdigit() and int(s) >= 1 else 1
+
+    def _report_mic(self) -> None:
+        if self._on_mic is not None:
+            try:
+                self._on_mic(self._mic_value())
+            except Exception:
+                log.exception("falha ao guardar o nº de pessoas no microfone")
+
     def _finish(self, value: int | None) -> None:
         if self._done:
             return
         self._done = True
         self._stop_timers()
         self.close()
+        self._report_mic()
         self._on_result(value)
 
     def _stop_timers(self) -> None:
@@ -182,6 +220,7 @@ class AskNumSpeakers(QWidget):
         # fechar no X = automático (uma vez só)
         if not self._done:
             self._done = True
+            self._report_mic()
             self._on_result(None)
         super().closeEvent(event)
 
@@ -195,9 +234,9 @@ class AskNumSpeakers(QWidget):
 
 
 def ask_num_speakers(on_result: Callable[[int | None], None], last_value: int | None = None,
-                     timeout_seconds: int = 90) -> AskNumSpeakers:
+                     timeout_seconds: int = 90, on_mic: Callable[[int], None] | None = None) -> AskNumSpeakers:
     """Abre a janela (não-bloqueante) e devolve a instância (o chamador guarda a ref)."""
-    win = AskNumSpeakers(on_result, last_value, timeout_seconds)
+    win = AskNumSpeakers(on_result, last_value, timeout_seconds, on_mic=on_mic)
     win.show()
     return win
 
@@ -245,7 +284,7 @@ class LabelSpeakersDialog(QWidget):
             info = info or {}
             auto = bool(info.get("auto"))
             labeled = bool(info.get("labeled"))
-            anon = slabel.startswith("Participante ")
+            anon = slabel.startswith(_ANON)
             guess = (guesses.get(slabel) or "").strip()
             prefill = guess or ("" if anon else slabel)
             if auto:

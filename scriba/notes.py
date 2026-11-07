@@ -1197,7 +1197,7 @@ def guess_voice_name(label: str, desc: str) -> str:
     Voz já nomeada (rótulo não é "Participante N") → o próprio rótulo. Senão tenta
     "Nome (…" no início da descrição ou "provavelmente/possivelmente/identificado X".
     Retorna "" quando a IA não cravou um nome (o usuário digita)."""
-    if not label.startswith("Participante "):
+    if not label.startswith(("Participante ", "Pessoa no mic ")):  # a 2ª: motor novo, mic
         return label
     m = _GUESS_LEAD.match(desc)
     if m:
