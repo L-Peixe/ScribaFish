@@ -403,6 +403,38 @@ def _vocabulary_block() -> str:
             "claro que é o termo; não invente ocorrências: " + ", ".join(termos))
 
 
+def _clientes_marcados(folder: Path) -> list[str]:
+    """Os ids dos clientes marcados no fim da call (motor novo, etapa 6); [] sem eles."""
+    try:
+        meta = json.loads((Path(folder) / "meta.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    if meta.get("motor") != "novo":
+        return []
+    return [str(i) for i in meta.get("clientes") or []]
+
+
+def _clientes_block(folder: Path) -> str:
+    """Os clientes que a pessoa marcou na call, com o contexto e os termos de cada um: a nota
+    sai com o cliente certo e os nomes escritos certo. Vazio sem cliente marcado."""
+    from . import clientes
+
+    try:
+        cs = clientes.por_ids(_clientes_marcados(folder))
+    except Exception:
+        return ""
+    if not cs:
+        return ""
+    linhas = []
+    for c in cs:
+        nomes = ", ".join([*c["pessoas"], *c["termos"]])
+        linhas.append(f"- {c['nome']}" + (f": {c['contexto']}" if c["contexto"] else "")
+                      + (f" (nomes e termos: {nomes})" if nomes else ""))
+    return ("\n\n=== CLIENTES DESTA REUNIÃO (marcados por quem gravou) ===\n"
+            "Use para a linha CLIENTE e para a grafia dos nomes; não invente ocorrências:\n"
+            + "\n".join(linhas))
+
+
 def _summary_call(body: str, meeting: str, timeout: int, folder: Path, *, notes_mode: bool = False) -> str | None:
     """Chamada de resumo estruturado (single-shot OU reduce final): aplica TITLE_INSTRUCTION +
     prompt.md sobre `body`. `notes_mode=False` → `body` é a transcrição crua; `True` → são as
@@ -413,7 +445,7 @@ def _summary_call(body: str, meeting: str, timeout: int, folder: Path, *, notes_
     CREATE_NO_WINDOW dispararia o bug do Windows Terminal (ver promptgen._call_claude)."""
     from . import ai
 
-    payload = f"{TITLE_INSTRUCTION}{load_summary_prompt()}{_vocabulary_block()}"
+    payload = f"{TITLE_INSTRUCTION}{load_summary_prompt()}{_vocabulary_block()}{_clientes_block(folder)}"
     if meeting:
         payload += f"\n\n=== NOME DA REUNIÃO (do título da janela; pista, pode estar incompleto) ===\n{meeting}"
     if notes_mode:
@@ -544,7 +576,15 @@ def _learn_terms(folder: Path, meta: dict, terms: list[str]) -> None:
 
     if not terms:
         return
-    novos = vocab_learn.record(meta.get("started_at") or folder.name, terms, load().whisper.hotwords)
+    reuniao = meta.get("started_at") or folder.name
+    ids = _clientes_marcados(folder)
+    if ids:
+        # motor novo com cliente marcado (etapa 6): os termos viram sugestão DOS clientes
+        from . import clientes
+
+        novos = clientes.registrar_termos(ids, reuniao, terms)
+    else:
+        novos = vocab_learn.record(reuniao, terms, load().whisper.hotwords)
     if novos:
         print(f"vocabulário: {len(novos)} termo(s) novo(s) para revisar: {', '.join(novos)}")
         try:

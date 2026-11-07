@@ -54,10 +54,40 @@ def diarization_cfg(cfg: Diarization) -> Diarization:
 
 
 class WordTranscriber(Transcriber):
-    """O Transcriber de sempre, pedindo a hora de cada palavra (lote e modo normal)."""
+    """O Transcriber de sempre, pedindo a hora de cada palavra (lote e modo normal).
+
+    `prompt` (etapa 6): o contexto e os nomes dos clientes marcados, como `initial_prompt`.
+    O motor novo nunca manda `hotwords` (o pipeline as zera): no silêncio do mic a lista
+    voltava como texto, em laço."""
+
+    def __init__(self, cfg: Whisper, force_cpu: bool = False, prompt: str = ""):
+        super().__init__(cfg, force_cpu=force_cpu)
+        self.prompt = (prompt or "").strip()
 
     def _extra_kwargs(self) -> dict:
-        return {"word_timestamps": True}
+        kw = {"word_timestamps": True}
+        if self.prompt:
+            kw["initial_prompt"] = self.prompt
+        return kw
+
+    def retranscrever(self, audio, inicio: float) -> list[Segment]:
+        """Um trecho de áudio (numpy, 16 kHz) de novo, SEM o prompt: a defesa contra o eco
+        do vocabulário (`defesa.defender`). Horas somadas a `inicio`."""
+        from .transcriber import vad_enabled
+
+        self.ensure_loaded()
+        kwargs = dict(language=self.cfg.language or None, vad_filter=vad_enabled(self.cfg),
+                      condition_on_previous_text=False, beam_size=max(1, int(self.cfg.beam_size or 3)),
+                      word_timestamps=True)
+        vad = self._vad_parameters()
+        if vad:
+            kwargs["vad_parameters"] = vad
+        segments, _info = self.model.transcribe(audio, **kwargs)
+        out: list[Segment] = []
+        for s in self._collect(segments, None):
+            words = [(a + inicio, b + inicio, t) for a, b, t in getattr(s, "words", [])]
+            out.append(WordSegment(start=s.start + inicio, end=s.end + inicio, text=s.text, words=words))
+        return out
 
     @staticmethod
     def _collect(segments, on_progress: Callable[[float], None] | None) -> list[Segment]:

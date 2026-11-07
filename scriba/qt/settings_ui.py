@@ -280,6 +280,7 @@ class SettingsWindow(QWidget):
         root.addWidget(self._tabs, 1)
         self._build_recording_tab()
         self._build_transcription_tab()
+        self._build_clientes_tab()
         self._build_ia_tab()
         self._build_detection_tab()
         self._build_dirs_tab()
@@ -525,6 +526,22 @@ class SettingsWindow(QWidget):
             if self._tabs.tabText(i).startswith(titulo):
                 self._tabs.setCurrentIndex(i)
                 return
+
+    def _build_clientes_tab(self) -> None:
+        """Clientes e o vocabulário de cada um (fork, etapa 6): só com o motor novo, que é
+        quem leva o vocabulário dos clientes marcados ao Whisper."""
+        from .. import motor_novo
+
+        try:
+            if not motor_novo.ativo(config_mod.load().whisper):
+                return
+        except Exception:
+            return
+        from .clientes_ui import ClientesPainel
+
+        f = self._tab("Clientes")
+        self._clientes_painel = ClientesPainel()
+        f.addRow(self._clientes_painel)
 
     def _build_learned_terms(self, form) -> None:
         """Vocabulário que aprende (#227): sugestões tiradas das reuniões (2+ reuniões) p/

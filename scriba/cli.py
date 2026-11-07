@@ -10,6 +10,12 @@ from pathlib import Path
 from . import __version__, plat
 
 
+
+def _lista_clientes(texto: str) -> list[str]:
+    """`--clientes coney,tmax` -> ["coney", "tmax"]; "" = nenhum cliente (tira os do meta)."""
+    return [x.strip() for x in (texto or "").split(",") if x.strip()]
+
+
 class _VersionAction(argparse.Action):
     """`--version` mostra a versão COM o build do git (sobe a cada commit/push)."""
 
@@ -118,6 +124,8 @@ def main(argv: list[str] | None = None) -> int:
                       help="nº de participantes remotos: trava a diarização em N vozes (persiste no meta)")
     p_tr.add_argument("--speakers-mic", type=int, default=None, metavar="N",
                       help="pessoas no microfone, contando você (motor novo): com 2+, separa as vozes do mic")
+    p_tr.add_argument("--clientes", type=_lista_clientes, default=None, metavar="ID,ID",
+                      help="clientes da call (motor novo): o vocabulário deles vai ao Whisper; \"\" = nenhum")
 
     p_su = sub.add_parser("summarize", help="(re)gera o resumo e o notas.md de uma pasta de reunião")
     p_su.add_argument("folder", type=Path)
@@ -133,6 +141,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="nº de participantes remotos: trava a diarização em N vozes (persiste no meta)")
     p_proc.add_argument("--speakers-mic", type=int, default=None, metavar="N",
                         help="pessoas no microfone, contando você (motor novo): com 2+, separa as vozes do mic")
+    p_proc.add_argument("--clientes", type=_lista_clientes, default=None, metavar="ID,ID",
+                        help="clientes da call (motor novo): o vocabulário deles vai ao Whisper; \"\" = nenhum")
     p_proc.add_argument("--cpu", action="store_true",
                         help="força transcrição E diarização em CPU (#115: recuperação pós-erro de GPU)")
 
@@ -290,7 +300,7 @@ def main(argv: list[str] | None = None) -> int:
 
         try:
             return transcribe_folder(args.folder, force_cpu=args.cpu, num_speakers=args.speakers,
-                                     num_speakers_mic=args.speakers_mic)
+                                     num_speakers_mic=args.speakers_mic, clientes=args.clientes)
         finally:
             idlewatch.disarm()  # sentinela de travamento (#188): fecha o hang.log
     if args.cmd == "summarize":
@@ -332,7 +342,7 @@ def main(argv: list[str] | None = None) -> int:
             if args.when_ready:
                 return process_when_ready(args.folder)
             return 0 if process_folder(args.folder, force_cpu=args.cpu, num_speakers=args.speakers,
-                                       num_speakers_mic=args.speakers_mic) else 1
+                                       num_speakers_mic=args.speakers_mic, clientes=args.clientes) else 1
         except OSError as e:
             # componentes danificados (#170): traceback cru de PermissionError
             # não diz nada ao usuário - troca por orientação e rc próprio

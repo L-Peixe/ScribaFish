@@ -28,16 +28,19 @@ def _set_status(meta: dict, meta_path: Path, status: str) -> None:
     idlewatch.beat()  # mudança de estágio é sinal de vida para a sentinela (#188)
 
 
-def _fix_vocabulary(turns: list, hotwords: str, meta: dict) -> None:
+def _fix_vocabulary(turns: list, hotwords: str, meta: dict, extra: list[str] | None = None) -> None:
     """Grafia dos termos do vocabulário na transcrição ("S 80" -> SE80, "enancement" ->
     enhancement) e o "Z" do SAP - antes de gravar, p/ nota, busca e consultas saírem
-    certas. Nunca derruba a transcrição: falha aqui só pula a correção."""
+    certas. Nunca derruba a transcrição: falha aqui só pula a correção.
+    `extra`: os termos dos clientes marcados na call (motor novo, etapa 6)."""
     from collections import Counter
 
     from . import promptgen, vocab_fix, vocab_learn
 
     try:
         termos = vocab_learn.all_terms(hotwords)   # digitado + aprendidos aceitos (#227)
+        vistos = {vocab_fix._norm(t) for t in termos}
+        termos += [t for t in extra or [] if vocab_fix._norm(t) not in vistos]
         perfil = promptgen.load_profile()           # regra do "Z" só p/ perfil SAP
         sap = promptgen.is_sap(perfil) if perfil is not None else None
         feitas: Counter = Counter()
@@ -55,7 +58,8 @@ def _fix_vocabulary(turns: list, hotwords: str, meta: dict) -> None:
 
 
 def transcribe_folder(folder: Path, force_cpu: bool = False, transcriber: TranscriptionProvider | None = None,
-                      num_speakers: int | None = None, num_speakers_mic: int | None = None) -> int:
+                      num_speakers: int | None = None, num_speakers_mic: int | None = None,
+                      clientes: list[str] | None = None) -> int:
     folder = Path(folder)
     meta_path = folder / "meta.json"
     if not meta_path.exists():
@@ -76,6 +80,13 @@ def transcribe_folder(folder: Path, force_cpu: bool = False, transcriber: Transc
             meta["num_speakers_mic"] = int(num_speakers_mic)
         else:
             meta.pop("num_speakers_mic", None)
+    # clientes da call (motor novo; janela do fim da call ou CLI --clientes): o contexto e os
+    # nomes deles vão ao Whisper como initial_prompt. Lista vazia = sem cliente.
+    if clientes is not None:
+        if clientes:
+            meta["clientes"] = list(clientes)
+        else:
+            meta.pop("clientes", None)
 
     if meta.get("audio_removed"):
         # áudio apagado DE PROPÓSITO (keep_audio=false): os WAVs não existem mais,
@@ -103,20 +114,35 @@ def transcribe_folder(folder: Path, force_cpu: bool = False, transcriber: Transc
     from . import motor_novo
 
     novo = motor_novo.ativo(cfg.whisper, force_cpu)
-    if transcriber is None:
-        # o Whisper também recebe os termos aprendidos e aceitos (#227) no prompt
-        from . import vocab_learn
+    # motor novo (etapa 6): o vocabulário é o dos clientes marcados, no initial_prompt
+    prompt, termos_clientes, nomes_clientes = "", [], []
+    if novo:
+        from . import clientes as clientes_mod
 
-        whisper = dataclasses.replace(cfg.whisper, hotwords=vocab_learn.whisper_hotwords(cfg.whisper.hotwords))
+        ids = meta.get("clientes") or []
+        prompt = clientes_mod.prompt_whisper(ids)
+        termos_clientes = clientes_mod.termos_de(ids)
+        nomes_clientes = [c["nome"] for c in clientes_mod.por_ids(ids)]
+    if transcriber is None:
         if novo:
-            transcriber = motor_novo.WordTranscriber(whisper, force_cpu=force_cpu)
+            # nunca hotwords no motor novo: no silêncio do mic a lista voltava em laço
+            # ("Google Tag Manager" ×54, call de 05/11 19h58)
+            whisper = dataclasses.replace(cfg.whisper, hotwords="")
+            transcriber = motor_novo.WordTranscriber(whisper, force_cpu=force_cpu, prompt=prompt)
         else:
+            # o Whisper também recebe os termos aprendidos e aceitos (#227) no prompt
+            from . import vocab_learn
+
+            whisper = dataclasses.replace(cfg.whisper, hotwords=vocab_learn.whisper_hotwords(cfg.whisper.hotwords))
             transcriber = make_transcriber(whisper, force_cpu=force_cpu)
     if novo:
         print("motor novo: voz por palavra")
         meta["motor"] = "novo"
+        if nomes_clientes:
+            print(f"vocabulário de {', '.join(nomes_clientes)} no initial_prompt ({len(prompt)} caracteres)")
     else:
         meta.pop("motor", None)
+    defesa_meta: dict[str, dict] = {}
     tr = transcriber
     device = tr.ensure_loaded()
     if (cfg.whisper.engine or "local").strip().lower() == "cloud":
@@ -153,6 +179,15 @@ def transcribe_folder(folder: Path, force_cpu: bool = False, transcriber: Transc
             continue
         print(f"transcrevendo {wav.name} ...")
         segments = tr.transcribe(wav)
+        if novo:
+            # defesa (etapa 6): trecho em laço ou que só repete o vocabulário é refeito sem ele
+            from . import defesa
+
+            segments, res = defesa.defender(tr, wav, segments, prompt, termos_clientes)
+            if res.suspeitos:
+                print(f"  defesa: {res.suspeitos} trecho(s) suspeito(s); {res.retranscritos} refeito(s) "
+                      f"sem o vocabulário, {res.lacos_cortados} laço(s) cortado(s), {res.removidos} removido(s)")
+                defesa_meta[stream_name] = res.como_dict()
         offset = float(s.get("offset_seconds", 0.0))
         print(f"  {len(segments)} segmentos")
         pending.append((stream_name, speaker, segments, offset))
@@ -163,6 +198,10 @@ def transcribe_folder(folder: Path, force_cpu: bool = False, transcriber: Transc
 
     final_device = tr.device_used or device
     tr.close()  # libera o Whisper ANTES da diarização: corta o pico de memória
+    if defesa_meta:
+        meta["defesa"] = defesa_meta
+    else:
+        meta.pop("defesa", None)
 
     # 2ª passada: diarização do loopback (pyannote), já sem o Whisper na memória
     diarized_groups: dict[str, list] | None = None
@@ -226,7 +265,7 @@ def transcribe_folder(folder: Path, force_cpu: bool = False, transcriber: Transc
 
     turns = merge_mod.merge(by_speaker)
     if getattr(cfg.whisper, "vocab_fix", False):
-        _fix_vocabulary(turns, getattr(cfg.whisper, "hotwords", ""), meta)
+        _fix_vocabulary(turns, getattr(cfg.whisper, "hotwords", ""), meta, extra=termos_clientes)
     # escrita atômica do transcript.json: ponto crítico — são vários MB e a única
     # cópia da transcrição; write_text direto trunca o arquivo se o processo morrer
     # no meio (antivírus, kill), corrompendo a retomada em process_folder
@@ -331,7 +370,8 @@ def _mark_failed(folder: Path, exc: BaseException) -> None:
 
 
 def process_folder(folder: Path, force_cpu: bool = False, transcriber: TranscriptionProvider | None = None,
-                   num_speakers: int | None = None, num_speakers_mic: int | None = None) -> Path | None:
+                   num_speakers: int | None = None, num_speakers_mic: int | None = None,
+                   clientes: list[str] | None = None) -> Path | None:
     """Fluxo completo pós-call: transcrever + gerar notas. Retorna o MD exportado.
 
     Qualquer exceção vira status="failed" no meta antes de propagar — a UI nunca
@@ -373,7 +413,8 @@ def process_folder(folder: Path, force_cpu: bool = False, transcriber: Transcrip
         if skip_transcribe:
             print("transcript.json já existe — retomando direto no resumo")
         elif transcribe_folder(folder, force_cpu=force_cpu, transcriber=transcriber,
-                               num_speakers=num_speakers, num_speakers_mic=num_speakers_mic) != 0:
+                               num_speakers=num_speakers, num_speakers_mic=num_speakers_mic,
+                               clientes=clientes) != 0:
             return None
         from . import notes
 
