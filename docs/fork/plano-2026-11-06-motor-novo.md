@@ -52,10 +52,11 @@ dos bancos e do config de antes da troca está em `%LOCALAPPDATA%\ScribaDev\back
 **Git:** `origin` = `git@github-lpeixe:L-Peixe/ScribaFish.git` (push pela chave SSH da L-Peixe, blueprint FREELAS
 §4.2), e-mail local `lucaspquimico@gmail.com`, push para o `upstream` desligado. PR **dentro do ScribaFish** (base
 `main`), nunca no repositório do Allan. O `gh` e o Chrome estão logados como `devsummus`: o Claude abre o PR com o
-token da L-Peixe (blueprint FREELAS §4.2); o Auto-fix desses PRs o app não liga. **Versões do Allan:** o Lucas clica em
-"Sync fork" no GitHub do ScribaFish; se conflitar com o motor novo, o GitHub recusa e ele chama o Claude. O aviso de
-versão nova do app continua vindo do manifesto do Allan; quando houver versão nova dele, o "Atualizar" faz o `git pull`
-e traz junto o que estiver no `main` do ScribaFish.
+token da L-Peixe (blueprint FREELAS §4.2); o Auto-fix desses PRs o app não liga. **Versões do Allan: não entram**
+(decisão do Lucas, 07/11). Nunca o "Sync fork" do GitHub (é o único caminho pelo qual o código dele chegaria ao
+ScribaFish); algo dele que interesse entra a pedido do Lucas, num PR com teste. O app ainda lê o manifesto do Allan
+(`updates.MANIFEST_URL`) só para o aviso de versão nova; quando ele publica uma, o "Atualizar" faz `git pull` do
+**ScribaFish**, nunca do Allan.
 
 ## Medido
 
@@ -136,19 +137,23 @@ inteiro com o nº de vozes, e o nome de cada voz dado pelo conteúdo.
 - **Nome das vozes:** voz cadastrada primeiro; o Claude propõe as demais pelo conteúdo e o Lucas confirma.
 - **Motor novo no dia a dia:** *"Sim, aponta"*. De onde roda: *"Pasta própria APP"* (não direto na `FORK`, para o
   trabalho em andamento não chegar às calls).
-- **Versões do Allan:** *"Você clica em Sync fork"* (não um PR com teste antes).
+- **Versões do Allan:** *"Você clica em Sync fork"* (não um PR com teste antes). **Substituída em 07/11:** *"eu não
+  quero que fique sendo puxado as coisas do Alan mais não, tá? Por uma questão de segurança. Se eu ver alguma
+  necessidade de alguma coisa que ele trouxe que pode ser interessante para a gente… ótimo. Mas eu quero uma distância
+  segura disso"*. Nada de "Sync fork"; o que interessar do Allan entra a pedido do Lucas, num PR com teste.
 - **Lista de termos (`hotwords`):** *"A agora, B depois"*: esvaziada no config do app em 06/11 (no silêncio do mic o
   Whisper devolvia a lista em laço); a defesa no motor entra com a etapa 6.
 
 ## Regras do fork
 
 - **Base:** `upstream/main` do Allan (1.4.27 em 06/11); cada etapa numa branch + PR no ScribaFish. Remoto `upstream` =
-  `allanrmartins/ScribaDev` (público, MIT; manter o aviso de copyright dele), só para puxar as melhorias dele; o
-  `origin` é o ScribaFish (ver "Git").
+  `allanrmartins/ScribaDev` (público, MIT; manter o aviso de copyright dele), só para **ler** o que ele fez quando o
+  Lucas pedir; nada do Allan entra sem pedido do Lucas e PR com teste (decisão de 07/11). O `origin` é o ScribaFish
+  (ver "Git").
 - **A pasta do app (`../APP`) não se edita:** é de onde roda o ScribaDev que grava as calls (ver "De onde o app roda").
   Uma etapa só chega nela depois de medida na bancada e mergeada.
 - **Código novo ao lado do antigo, atrás de chave:** `[whisper] motor = "classico" | "novo"`. Desfaz desligando a
-  chave. Isso também mantém fácil trazer as atualizações do Allan.
+  chave.
 - **Conteúdo de reunião nunca entra no git.** A bancada (`bancada/`) é código; gabaritos e áudios ficam em
   `LAB-TRANSCRICAO/gabarito/` e nas pastas de gravação.
 
@@ -208,3 +213,5 @@ Cada etapa mede na bancada antes de ligar: palavras, falas com a voz certa (gaba
   5 calls (18 min de placa): 3 servem (28/10 16h08, 13/10 16h03, 23/10 10h01); a de 05/11 19h58 foi recusada (outra voz
   com 272 s de 570 s: a Giovana) e a de 04/11 12h14 também (215 s de 753 s). Corrigido o "De onde o app roda": o
   "Atualizar" não traz os PRs do ScribaFish (compara a versão com a do Allan); a `APP` se atualiza com `git pull`.
+- **2026-11-07** — decisão do Lucas: as versões do Allan não entram mais (nada de "Sync fork"); o que interessar dele, a
+  pedido e por PR com teste.
