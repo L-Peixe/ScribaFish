@@ -156,6 +156,92 @@ def _falas(seg: Segment, turnos: _Turnos, turns) -> list[tuple[str | None, Segme
     return out
 
 
+EU = "Eu"                      # quem grava; no cadastro, a entrada "Eu" é a sua voz
+PESSOA_NO_MIC = "Pessoa no mic"
+
+
+def nomes_do_mic(order: dict[str, int], embeddings: dict, durations: dict[str, float],
+                 store: list[dict], usados=()) -> dict[str, str]:
+    """Nome de cada voz do microfone: {"Participante N": nome}.
+
+    1. A voz que o cadastro reconhece como "Eu" é quem grava.
+    2. As outras reconhecidas pelo cadastro levam o nome (nunca um já usado no loopback,
+       nunca o mesmo em duas vozes).
+    3. Sem "Eu" no cadastro, quem grava é a voz com mais fala entre as não reconhecidas.
+    4. As que sobram viram "Pessoa no mic 1, 2…", na ordem em que aparecem.
+    """
+    from . import speakers
+
+    em_ordem = sorted(order.items(), key=lambda kv: kv[1])
+    achados = []  # (score, parte, nome do cadastro)
+    for label, n in em_ordem:
+        if embeddings.get(label) is not None:
+            nome, score = speakers.match(embeddings[label], store)
+            if nome:
+                achados.append((score, f"Participante {n}", nome))
+    nomes: dict[str, str] = {}
+    usados = set(usados)
+    for _score, part, nome in sorted(achados, reverse=True):  # o mais parecido leva o nome
+        if part in nomes or (nome != EU and nome in usados) or (nome == EU and EU in nomes.values()):
+            continue
+        nomes[part] = nome
+        usados.add(nome)
+    if EU not in nomes.values():
+        livres = [(durations.get(label, 0.0), -n, f"Participante {n}") for label, n in order.items()
+                  if f"Participante {n}" not in nomes]
+        if livres:
+            nomes[max(livres)[2]] = EU
+    k = 0
+    for _label, n in em_ordem:
+        part = f"Participante {n}"
+        if part not in nomes:
+            k += 1
+            nomes[part] = f"{PESSOA_NO_MIC} {k}"
+    return nomes
+
+
+def vozes_do_mic(wav, segments: list[Segment], cfg: Diarization, num_speakers: int, meta: dict,
+                 usados=(), force_cpu: bool = False) -> tuple[dict[str, list[Segment]], dict[str, dict]] | None:
+    """Mais de uma pessoa no microfone: separa as vozes do mic como as do loopback
+    (`diarize.diarize` com `diarization_cfg`, pedaços de 3 min) e dá a cada palavra a sua
+    voz (`assign_words`). Devolve ({nome: falas}, {nome: voz p/ o voices.json}), sem
+    "Eu" no segundo; None se a separação não rodou (aí o mic segue inteiro como "Eu").
+    `usados`: nomes já dados no loopback, que o mic não repete."""
+    from . import diarize, speakers
+
+    aviso: dict = {}
+    dz = diarize.diarize(wav, diarization_cfg(cfg), num_speakers=num_speakers, meta=aviso,
+                         force_cpu=force_cpu)
+    if not dz or not dz.turns:
+        if aviso.get("diarization_error"):
+            meta["diarization_mic_error"] = aviso["diarization_error"]
+        return None
+    meta.pop("diarization_mic_error", None)
+    grouped, order = assign_words(segments, dz.turns)
+    durations: dict[str, float] = {}
+    for a, b, label in dz.turns:
+        durations[label] = durations.get(label, 0.0) + (b - a)
+    store = speakers.load_store()
+    nomes = nomes_do_mic(order, dz.embeddings, durations, store, usados)
+    falas: dict[str, list[Segment]] = {}
+    for part, segs in grouped.items():
+        falas.setdefault(nomes.get(part, EU), []).extend(segs)  # sem voz: fica com quem grava
+    for segs in falas.values():
+        segs.sort(key=lambda s: s.start)
+    vozes: dict[str, dict] = {}  # só os outros do mic: "Eu" não se rotula (como antes)
+    for label, n in order.items():
+        nome, emb = nomes.get(f"Participante {n}"), dz.embeddings.get(label)
+        if nome in (None, EU) or emb is None:
+            continue
+        score = speakers.match(emb, store)[1]
+        vozes[nome] = {"embedding": emb, "auto": not nome.startswith(PESSOA_NO_MIC),
+                       "score": round(float(score), 3), "mic": True}
+    meta["speakers_mic"] = sorted(falas)
+    print("vozes no mic: " + ", ".join(f"{nomes[f'Participante {n}']} ({durations.get(lb, 0):.0f} s)"
+                                       for lb, n in sorted(order.items(), key=lambda kv: kv[1])))
+    return falas, vozes
+
+
 def assign_words(segments: list[Segment], turns) -> tuple[dict[str, list[Segment]], dict[str, int]]:
     """Como `diarize.assign_speakers`, mas por palavra: cada palavra vai para a voz do turno
     que contém o meio dela, e a fala é cortada onde a voz muda ou há pausa > PAUSA_CORTA_S.

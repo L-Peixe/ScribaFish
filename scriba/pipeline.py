@@ -55,7 +55,7 @@ def _fix_vocabulary(turns: list, hotwords: str, meta: dict) -> None:
 
 
 def transcribe_folder(folder: Path, force_cpu: bool = False, transcriber: TranscriptionProvider | None = None,
-                      num_speakers: int | None = None) -> int:
+                      num_speakers: int | None = None, num_speakers_mic: int | None = None) -> int:
     folder = Path(folder)
     meta_path = folder / "meta.json"
     if not meta_path.exists():
@@ -69,6 +69,13 @@ def transcribe_folder(folder: Path, force_cpu: bool = False, transcriber: Transc
     if num_speakers is not None:
         meta["num_speakers"] = int(num_speakers)
     num_speakers = meta.get("num_speakers")
+    # pessoas no microfone, contando quem grava (motor novo; CLI --speakers-mic): com
+    # mais de uma, o mic também passa pela separação de vozes. 1 = o mic é todo "Eu".
+    if num_speakers_mic is not None:
+        if int(num_speakers_mic) > 1:
+            meta["num_speakers_mic"] = int(num_speakers_mic)
+        else:
+            meta.pop("num_speakers_mic", None)
 
     if meta.get("audio_removed"):
         # áudio apagado DE PROPÓSITO (keep_audio=false): os WAVs não existem mais,
@@ -125,6 +132,7 @@ def transcribe_folder(folder: Path, force_cpu: bool = False, transcriber: Transc
     # o pico de RAM/VRAM virar max(Whisper, pyannote) em vez da soma dos dois.
     pending: list[tuple[str, str, list, float]] = []  # (stream, speaker, segments, offset)
     loopback_wav: Path | None = None
+    mic_wav: Path | None = None
     for stream_name, speaker in (("mic", "Eu"), ("loopback", "Participantes")):
         s = (meta.get("streams") or {}).get(stream_name)
         if not s or not s.get("file"):
@@ -150,6 +158,8 @@ def transcribe_folder(folder: Path, force_cpu: bool = False, transcriber: Transc
         pending.append((stream_name, speaker, segments, offset))
         if stream_name == "loopback" and segments:
             loopback_wav = wav
+        elif stream_name == "mic" and segments:
+            mic_wav = wav
 
     final_device = tr.device_used or device
     tr.close()  # libera o Whisper ANTES da diarização: corta o pico de memória
@@ -183,9 +193,28 @@ def transcribe_folder(folder: Path, force_cpu: bool = False, transcriber: Transc
                 folder, meta, diarized_groups, order, dz_result.embeddings
             )
 
+    # motor novo, mais de uma pessoa no mic: o mic passa pela mesma separação, quem
+    # grava segue "Eu" e os outros levam o nome do cadastro ou "Pessoa no mic N"
+    mic_groups: dict[str, list] | None = None
+    n_mic = int(meta.get("num_speakers_mic") or 1)
+    if (novo and n_mic > 1 and mic_wav is not None and cfg.diarization.enabled
+            and "diarization_deferred" not in meta):
+        _set_status(meta, meta_path, "diarizing")
+        mic_segments = next((seg for st, _sp, seg, _off in pending if st == "mic"), [])
+        out = motor_novo.vozes_do_mic(mic_wav, mic_segments, cfg.diarization, n_mic, meta,
+                                      usados=set(diarized_groups or ()), force_cpu=force_cpu)
+        if out is not None:
+            mic_groups, mic_voices = out
+            _add_mic_voices(folder, meta, mic_voices)
+    if mic_groups is None:
+        meta.pop("speakers_mic", None)
+
     for stream_name, speaker, segments, offset in pending:
         if stream_name == "loopback" and diarized_groups is not None:
             for name, group in diarized_groups.items():
+                by_speaker[name] = (group, offset)
+        elif stream_name == "mic" and mic_groups is not None:
+            for name, group in mic_groups.items():
                 by_speaker[name] = (group, offset)
         else:
             by_speaker[speaker] = (segments, offset)
@@ -231,7 +260,8 @@ def _apply_voice_enrollment(folder: Path, meta: dict, grouped: dict, order: dict
         return grouped
     from . import speakers
 
-    store = speakers.load_store()
+    # "Eu" no cadastro é a voz de quem grava (motor novo, vozes no mic): nunca do loopback
+    store = [e for e in speakers.load_store() if e.get("name") != "Eu"]
     part_to_label = {f"Participante {n}": label for label, n in order.items()}
     voices: dict[str, dict] = {}
     renames: dict[str, str] = {}
@@ -266,6 +296,27 @@ def _apply_voice_enrollment(folder: Path, meta: dict, grouped: dict, order: dict
     return grouped
 
 
+def _add_mic_voices(folder: Path, meta: dict, mic_voices: dict) -> None:
+    """Põe as outras vozes do mic (motor novo; "Eu" fica de fora) no voices.json, ao lado
+    das do loopback, para o "Quem é cada voz?" nomear e aprender "Pessoa no mic N"."""
+    vpath = folder / "voices.json"
+    try:
+        voices = json.loads(vpath.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        voices = {}
+    if not isinstance(voices, dict):
+        voices = {}
+    voices = {k: v for k, v in voices.items() if not (v or {}).get("mic")}  # de uma rodada anterior
+    voices.update(mic_voices)
+    try:
+        util_mod.atomic_write_text(vpath, json.dumps(voices, ensure_ascii=False))
+    except Exception as e:
+        print(f"AVISO: não salvei as vozes do mic no voices.json ({e})")
+    recognized = sorted(n for n, v in voices.items() if v.get("auto"))
+    if recognized:
+        meta["speakers_recognized"] = recognized
+
+
 def _mark_failed(folder: Path, exc: BaseException) -> None:
     """Status terminal "failed" no meta (se ainda estava em andamento) + motivo."""
     meta_path = Path(folder) / "meta.json"
@@ -280,7 +331,7 @@ def _mark_failed(folder: Path, exc: BaseException) -> None:
 
 
 def process_folder(folder: Path, force_cpu: bool = False, transcriber: TranscriptionProvider | None = None,
-                   num_speakers: int | None = None) -> Path | None:
+                   num_speakers: int | None = None, num_speakers_mic: int | None = None) -> Path | None:
     """Fluxo completo pós-call: transcrever + gerar notas. Retorna o MD exportado.
 
     Qualquer exceção vira status="failed" no meta antes de propagar — a UI nunca
@@ -322,7 +373,7 @@ def process_folder(folder: Path, force_cpu: bool = False, transcriber: Transcrip
         if skip_transcribe:
             print("transcript.json já existe — retomando direto no resumo")
         elif transcribe_folder(folder, force_cpu=force_cpu, transcriber=transcriber,
-                               num_speakers=num_speakers) != 0:
+                               num_speakers=num_speakers, num_speakers_mic=num_speakers_mic) != 0:
             return None
         from . import notes
 

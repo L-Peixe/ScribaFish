@@ -83,6 +83,48 @@ class SpeakersTests(unittest.TestCase):
         w.close()
         self.assertEqual(got, [2])
 
+    def test_pessoa_no_mic_e_voz_sem_nome(self):
+        from scriba.qt import speakers_ui
+
+        d = Path(tempfile.mkdtemp(prefix="scriba_pm_"))
+        (d / "voices.json").write_text(json.dumps({"Giovana": {"auto": True, "mic": True},
+                                                   "Pessoa no mic 1": {"mic": True}}), encoding="utf-8")
+        self.assertEqual(speakers_ui.voice_label_state(d), "pending")
+
+    def test_sem_on_mic_nao_pergunta_do_microfone(self):
+        from scriba.qt.speakers_ui import AskNumSpeakers
+
+        w = AskNumSpeakers(lambda _v: None, timeout_seconds=0)
+        self.assertIsNone(w._mic_entry)
+
+    def test_pessoas_no_mic_vem_antes_do_resultado(self):
+        # motor novo (etapa 5 do fork): quantas pessoas no seu microfone, contando você
+        from scriba.qt.speakers_ui import AskNumSpeakers
+
+        got = []
+        w = AskNumSpeakers(lambda v: got.append(("outros", v)), timeout_seconds=0,
+                           on_mic=lambda n: got.append(("mic", n)))
+        self.assertEqual(w._mic_entry.text(), "1")
+        w._entry.setText("1")
+        w._mic_entry.setText("2")
+        w._confirm()
+        self.assertEqual(got, [("mic", 2), ("outros", 1)])
+
+    def test_pessoas_no_mic_em_qualquer_saida(self):
+        from scriba.qt.speakers_ui import AskNumSpeakers
+
+        got = []
+        w = AskNumSpeakers(got.append, timeout_seconds=5, on_mic=lambda n: got.append(f"mic {n}"))
+        w._mic_entry.setText("")             # apagado: vale o padrão, 1
+        w._left = 0
+        w._tick()                            # tempo esgotado: automático
+        self.assertEqual(got, ["mic 1", None])
+        got.clear()
+        w = AskNumSpeakers(got.append, timeout_seconds=0, on_mic=lambda n: got.append(f"mic {n}"))
+        w._mic_entry.setText("3")
+        w.close()                            # fechar no X
+        self.assertEqual(got, ["mic 3", None])
+
     def _folder_with_voices(self):
         d = Path(tempfile.mkdtemp(prefix="scriba_lbl_"))
         (d / "voices.json").write_text(json.dumps({

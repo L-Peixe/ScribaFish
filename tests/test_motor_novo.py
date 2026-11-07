@@ -252,5 +252,205 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(turns, [("Participante 1", "Bom dia. Oi, tudo bem?")])
 
 
+class NomesDoMicTests(unittest.TestCase):
+    """Etapa 5: mais de uma pessoa no microfone (call de 05/11 19h58, o Lucas e a Giovana)."""
+
+    LUCAS = [1.0, 0.0, 0.0]
+    GIOVANA = [0.0, 1.0, 0.0]
+    OUTRA = [0.0, 0.0, 1.0]
+
+    def _nomes(self, embs, dur, store, usados=()):
+        order = {lab: k + 1 for k, lab in enumerate(embs)}
+        return motor_novo.nomes_do_mic(order, embs, dur, store, usados)
+
+    def test_cadastro_acha_a_giovana_e_a_outra_voz_e_quem_grava(self):
+        # a Giovana fala mais, mas é reconhecida: quem grava é a voz que sobra
+        nomes = self._nomes({"A": self.GIOVANA, "B": self.LUCAS}, {"A": 600.0, "B": 300.0},
+                            [{"name": "Giovana", "embedding": self.GIOVANA}])
+        self.assertEqual(nomes, {"Participante 1": "Giovana", "Participante 2": "Eu"})
+
+    def test_sem_cadastro_quem_mais_fala_e_quem_grava(self):
+        nomes = self._nomes({"A": self.GIOVANA, "B": self.LUCAS}, {"A": 100.0, "B": 300.0}, [])
+        self.assertEqual(nomes, {"Participante 1": "Pessoa no mic 1", "Participante 2": "Eu"})
+
+    def test_eu_no_cadastro_vale_mesmo_falando_menos(self):
+        nomes = self._nomes({"A": self.GIOVANA, "B": self.LUCAS}, {"A": 600.0, "B": 100.0},
+                            [{"name": "Eu", "embedding": self.LUCAS}])
+        self.assertEqual(nomes, {"Participante 1": "Pessoa no mic 1", "Participante 2": "Eu"})
+
+    def test_nome_do_loopback_nao_se_repete_no_mic(self):
+        nomes = self._nomes({"A": self.LUCAS, "B": self.GIOVANA}, {"A": 300.0, "B": 100.0},
+                            [{"name": "Giovana", "embedding": self.GIOVANA}], usados={"Giovana"})
+        self.assertEqual(nomes, {"Participante 1": "Eu", "Participante 2": "Pessoa no mic 1"})
+
+    def test_mesmo_nome_em_duas_vozes_fica_com_a_mais_parecida(self):
+        quase = [0.0, 0.8, 0.6]  # cosseno 0,8 com a Giovana
+        nomes = self._nomes({"A": quase, "B": self.GIOVANA, "C": self.LUCAS},
+                            {"A": 50.0, "B": 100.0, "C": 300.0},
+                            [{"name": "Giovana", "embedding": self.GIOVANA}])
+        self.assertEqual(nomes, {"Participante 1": "Pessoa no mic 1", "Participante 2": "Giovana",
+                                 "Participante 3": "Eu"})
+
+
+class MicPipelineTests(unittest.TestCase):
+    """transcribe_folder com o mic e o loopback: o mic só é separado com motor novo e 2+ pessoas."""
+
+    def _pasta(self, meta_extra=None):
+        d = Path(tempfile.mkdtemp(prefix="scriba_mic_"))
+        meta = {"status": "recorded", "streams": {
+            "mic": {"file": "mic.opus", "offset_seconds": 0.0},
+            "loopback": {"file": "loopback.opus", "offset_seconds": 0.0}}}
+        meta.update(meta_extra or {})
+        (d / "meta.json").write_text(json.dumps(meta), encoding="utf-8")
+        for nome in ("mic.opus", "loopback.opus"):
+            (d / nome).write_bytes(b"\x00" * 80)
+        return d
+
+    def _rodar(self, motor="novo", meta_extra=None, store=None, **kw):
+        import scriba.diarize as diarize_mod
+        import scriba.pipeline as pipeline
+        from scriba import speakers
+
+        mic = _seg((0.0, 0.4, "Pergunta"), (0.5, 0.9, "um."), (1.2, 1.5, "Eu"), (1.6, 2.0, "acho"), (2.1, 2.4, "isso."))
+        lb = _seg((5.0, 5.4, "Resposta"), (5.5, 5.9, "dela."))
+
+        class _FakeTr:
+            device_used = "cpu"
+
+            def ensure_loaded(self):
+                return "cpu"
+
+            def transcribe(self, wav):
+                return [mic] if wav.name.startswith("mic") else [lb]
+
+            def close(self):
+                pass
+
+        chamadas = []
+
+        def _fake_diarize(wav, dz_cfg, num_speakers=None, **kw):
+            chamadas.append((wav.name, num_speakers))
+            if wav.name.startswith("mic"):
+                return diarize_mod.DiarizationResult(
+                    turns=[(0.0, 1.0, "M0"), (1.1, 2.5, "M1")],
+                    embeddings={"M0": [1.0, 0.0, 0.0], "M1": [0.0, 1.0, 0.0]})
+            return diarize_mod.DiarizationResult(turns=[(5.0, 6.0, "L0")],
+                                                 embeddings={"L0": [0.0, 0.0, 1.0]})
+
+        cfg = SimpleNamespace(
+            whisper=config.Whisper(motor=motor, vocab_fix=False),
+            diarization=config.Diarization(enabled=True, hf_token="t", only_on_ac=False),
+        )
+        d = self._pasta(meta_extra)
+        with mock.patch.object(pipeline, "load", return_value=cfg), \
+                mock.patch.object(diarize_mod, "diarize", _fake_diarize), \
+                mock.patch.object(speakers, "load_store", return_value=list(store or [])):
+            rc = pipeline.transcribe_folder(d, transcriber=_FakeTr(), **kw)
+        self.assertEqual(rc, 0)
+        meta = json.loads((d / "meta.json").read_text(encoding="utf-8"))
+        turns = json.loads((d / "transcript.json").read_text(encoding="utf-8"))
+        voices = json.loads((d / "voices.json").read_text(encoding="utf-8"))
+        return chamadas, meta, [(t["speaker"], t["text"]) for t in turns], voices
+
+    GIOVANA = {"name": "Giovana", "embedding": [1.0, 0.0, 0.0]}
+
+    def test_duas_pessoas_no_mic_separa_e_quem_grava_segue_eu(self):
+        chamadas, meta, turns, voices = self._rodar(meta_extra={"num_speakers_mic": 2}, store=[self.GIOVANA])
+        self.assertIn(("mic.opus", 2), chamadas)
+        self.assertEqual(turns, [("Giovana", "Pergunta um."), ("Eu", "Eu acho isso."),
+                                 ("Participante 1", "Resposta dela.")])
+        self.assertEqual(meta["speakers_mic"], ["Eu", "Giovana"])
+        self.assertTrue(voices["Giovana"]["mic"] and voices["Giovana"]["auto"])
+        self.assertNotIn("Eu", voices)
+        self.assertIn("Participante 1", voices)   # a do loopback continua lá
+
+    def test_pessoa_que_o_cadastro_nao_conhece(self):
+        _ch, _meta, turns, voices = self._rodar(meta_extra={"num_speakers_mic": 2})
+        # sem cadastro, quem mais fala no mic (M1, 1,4 s) é quem grava
+        self.assertEqual([s for s, _t in turns], ["Pessoa no mic 1", "Eu", "Participante 1"])
+        self.assertFalse(voices["Pessoa no mic 1"]["auto"])
+
+    def test_uma_pessoa_no_mic_nada_muda(self):
+        chamadas, meta, turns, _v = self._rodar(store=[self.GIOVANA])
+        self.assertEqual([c[0] for c in chamadas], ["loopback.opus"])
+        self.assertEqual(turns[0], ("Eu", "Pergunta um. Eu acho isso."))
+        self.assertNotIn("speakers_mic", meta)
+
+    def test_motor_classico_nao_separa_o_mic(self):
+        chamadas, _meta, turns, _v = self._rodar(motor="classico", meta_extra={"num_speakers_mic": 2})
+        self.assertEqual([c[0] for c in chamadas], ["loopback.opus"])
+        self.assertEqual(turns[0][0], "Eu")
+
+    def test_argumento_da_cli_grava_no_meta(self):
+        chamadas, meta, _t, _v = self._rodar(num_speakers_mic=2)
+        self.assertEqual(meta["num_speakers_mic"], 2)
+        self.assertIn(("mic.opus", 2), chamadas)
+        _c, meta, _t, _v = self._rodar(meta_extra={"num_speakers_mic": 2}, num_speakers_mic=1)
+        self.assertNotIn("num_speakers_mic", meta)
+
+    def test_eu_do_cadastro_nunca_vai_para_o_loopback(self):
+        eu = {"name": "Eu", "embedding": [0.0, 0.0, 1.0]}   # igual à voz do loopback
+        _c, _m, turns, voices = self._rodar(store=[eu])
+        self.assertEqual(turns[-1][0], "Participante 1")
+        self.assertNotIn("Eu", voices)
+
+
+class JanelaDoFimDaCallTests(unittest.TestCase):
+    """main._ask_speakers_then_enqueue: a pergunta do mic só com o motor novo, e o meta só
+    ganha num_speakers_mic com 2 ou mais."""
+
+    def _app(self, motor, pasta):
+        import queue
+        import threading
+
+        from scriba.main import ScribaApp
+
+        app = ScribaApp.__new__(ScribaApp)
+        app.cfg = SimpleNamespace(whisper=config.Whisper(motor=motor),
+                                  diarization=config.Diarization(ask_speakers_timeout=0))
+        app.jobs = queue.Queue()
+        app.rec_lock = threading.Lock()
+        return app
+
+    def _abrir(self, motor, outros, mic):
+        import importlib.util
+
+        if importlib.util.find_spec("PySide6") is None:
+            self.skipTest("PySide6 não instalado")
+        import scriba.main as main_mod
+        import scriba.qt.speakers_ui as sui
+
+        d = Path(tempfile.mkdtemp(prefix="scriba_fim_"))
+        (d / "meta.json").write_text("{}", encoding="utf-8")
+        app = self._app(motor, d)
+        vistos = {}
+
+        def _fake_ask(on_result, last_value=None, timeout_seconds=0, on_mic=None):
+            vistos["on_mic"] = on_mic
+            if on_mic is not None:
+                on_mic(mic)
+            on_result(outros)
+
+        with mock.patch.object(sui, "ask_num_speakers", _fake_ask), \
+                mock.patch.object(main_mod.util, "read_state", return_value={}), \
+                mock.patch.object(main_mod.util, "update_state"):
+            app._ask_speakers_then_enqueue(d)
+        self.assertEqual(app.jobs.get_nowait(), d)
+        return vistos, json.loads((d / "meta.json").read_text(encoding="utf-8"))
+
+    def test_motor_novo_pergunta_e_grava_duas_pessoas(self):
+        vistos, meta = self._abrir("novo", 1, 2)
+        self.assertIsNotNone(vistos["on_mic"])
+        self.assertEqual((meta["num_speakers"], meta["num_speakers_mic"]), (1, 2))
+
+    def test_uma_pessoa_no_mic_nao_grava_nada(self):
+        _v, meta = self._abrir("novo", 3, 1)
+        self.assertEqual(meta, {"num_speakers": 3})
+
+    def test_classico_nao_pergunta(self):
+        vistos, _meta = self._abrir("classico", 3, 2)
+        self.assertIsNone(vistos["on_mic"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

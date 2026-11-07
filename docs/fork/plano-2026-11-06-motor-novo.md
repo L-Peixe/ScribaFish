@@ -10,7 +10,8 @@
 | 1. Bancada | ✅ `bancada/vozes_por_palavra.py` e o 1º gabarito (call de 27 min). ⏳ Faltam os gabaritos da gravação de celular de 1h29 e da call de 48 min |
 | 2. Voz por palavra | ✅ no app, atrás de `[whisper] motor = "novo"` (`scriba/motor_novo.py`) |
 | 3. Vozes com o modelo novo | ✅ `community-1` (`[diarization] model_novo`) pelos pedaços de 3 min de sempre, com a redução de vozes corrigida. 🚫 Áudio inteiro: não precisa (os pedaços deram 17 de 17 com 1,6 GB; o inteiro pede 8,9 GB) |
-| 4 a 8 | ⏳ não começadas (avaliado em 06/11) |
+| 4, 6, 7, 8 | ⏳ não começadas (avaliado em 06/11) |
+| 5. Vozes no microfone | ✅ no app atrás de `motor = "novo"` e de 2+ pessoas no mic (ver "Vozes no microfone" abaixo); call de 05/11 19h58: 14 de 15 falas com o nome certo |
 | 9. GitHub pessoal | ✅ `L-Peixe/ScribaFish` (ver "Git") |
 
 **Como o motor novo está ligado:** `scriba/motor_novo.py` tem o `WordTranscriber` (o Transcriber de sempre pedindo
@@ -21,6 +22,17 @@ fala nova onde a voz muda ou há pausa > 1,5 s) e o `diarization_cfg` (troca o m
 seguem iguais. Motor da Apple, nuvem e MLX não dão palavras e ficam no clássico. No `diarize.py` do Allan, só a redução
 das vozes ao nº informado ganhou o ramo `durations` (voz com < 5% da fala sai primeiro), desligado no clássico. O modo
 exclusivo do `community-1` **não** é usado: na bancada deu o mesmo 17 de 17, e usá-lo pedia mexer mais no `diarize.py`.
+
+**Vozes no microfone (etapa 5):** com o motor novo, a janela do fim da call pergunta também quantas pessoas estão no
+seu microfone, contando você (padrão 1; `meta.json` ganha `num_speakers_mic` só com 2+; na CLI, `--speakers-mic N` em
+`transcribe` e `process`). Com 2+, o mic passa pela mesma separação do loopback (`motor_novo.vozes_do_mic`: `community-1`,
+pedaços de 3 min, voz por palavra). Nome de cada voz (`nomes_do_mic`): uma entrada **"Eu"** no cadastro, se existir, é
+quem grava; as outras reconhecidas pelo cadastro levam o nome (nunca um já dado no loopback); sem "Eu" no cadastro, quem
+grava é a voz que mais fala entre as **não reconhecidas**; o resto vira "Pessoa no mic N", que entra no `voices.json`
+(com `"mic": true`) para o "Quem é cada voz?" nomear. O cadastro **não tem a voz do Lucas** (o app nunca cadastra o
+"Eu"); na call de 05/11 quem resolveu foi a Giovana reconhecida (parecença 0,83), porque ela falou mais que o Lucas
+(305 s × 265 s): pelo critério de "quem mais fala", sem o cadastro dela, os dois sairiam trocados. A entrada "Eu" é ignorada
+no loopback. Com 1 pessoa no mic ou motor clássico, nada muda. O "Eu" no cadastro ainda não tem como ser criado (pendente).
 
 **De onde o app roda:** o app que grava as calls roda do `../APP`, um clone do `main` do ScribaFish (instalação
 editável no venv do ScribaDev: `pip install -e ../APP --no-deps`), com `motor = 'novo'` no
@@ -68,6 +80,18 @@ de 6 GB** (125 s para 27 min, transbordando para a memória do sistema), e lote 
 0,96 da mesma pessoa), mas sobra uma 4ª voz de 17 s (eco ou ruído; cosseno ~0,1 com todo mundo). A redução ao nº
 informado fundia o par mais parecido, que era a pessoa que fala pouco com a que fala muito (0,25), e a voz de 17 s
 ficava. No motor novo, a voz com menos de 5% da fala é fundida primeiro (`_reduce_globals_to(..., durations=)`).
+
+**07/11 — vozes no microfone, call de 05/11 19h58** (35 min; o Lucas e a Giovana no mesmo mic, a Roberta do outro lado;
+`bancada/pipeline_na_copia.py` com o gabarito `gabarito/2026-11-05-roberta-mic-com-2.json`: 15 falas do mic, donos
+confirmados pelo Lucas):
+
+| Rodada | Falas do mic com o nome certo | Pico de VRAM | Tempo (2 trilhas, 2 separações) |
+|---|---|---|---|
+| App instalado (tudo do mic como "Eu") | 5 de 15 (só as do Lucas) | — | — |
+| **Motor novo, 2 pessoas no mic** | **14 de 15** (erro: "Vixe, mãe" foi para a Giovana) | **1,59 GB** | **295 s** |
+
+O loopback seguiu igual (a Roberta reconhecida pelo cadastro). Sobram falas picotadas onde as duas vozes se alternam
+em menos de 1 s ("O tópico é a / sua vida de veterinário, / minha mãe"); suavizar isso pede gabarito maior.
 
 ## Por que o fork
 
@@ -175,3 +199,6 @@ Cada etapa mede na bancada antes de ligar: palavras, falas com a voz certa (gaba
   no silêncio do mic ("Google Tag Manager" ×54). Refeita pelo app (`scribadev process`, motor novo, sem a lista): zero
   laços, a fala dos 100 s voltou. A defesa no motor entrou na etapa 6.
 - **2026-11-06** — etapa 5 ganhou o caso real: a call de 05/11 19h58 tinha o Lucas e a Giovana no mesmo mic.
+- **2026-11-07** — etapa 5 no app, atrás do motor novo: a janela do fim da call pergunta as pessoas no mic, o mic com 2+
+  passa pela separação, a voz de quem grava segue "Eu". Call de 05/11 19h58: 14 de 15 falas do mic com o nome certo,
+  contra 5 do app instalado. Achado: o cadastro de vozes não tem a voz do Lucas.

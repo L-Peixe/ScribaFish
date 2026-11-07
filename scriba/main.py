@@ -427,30 +427,38 @@ class ScribaApp:
                 util.update_state(last_num_speakers=int(n))
             self.jobs.put(folder)
 
+        def mic(n: int) -> None:  # motor novo: 2+ pessoas no mic separam as vozes dele
+            if n > 1:
+                self._save_num_speakers(folder, n, key="num_speakers_mic")
+
         try:
+            from . import motor_novo
+
             last = util.read_state().get("last_num_speakers")
             ask_num_speakers(
                 done,
                 last_value=last if isinstance(last, int) else None,
                 timeout_seconds=int(self.cfg.diarization.ask_speakers_timeout or 0),
+                on_mic=mic if motor_novo.ativo(self.cfg.whisper) else None,
             )
         except Exception:
             log.exception("janela de nº de participantes falhou — enfileirando direto")
             self.jobs.put(folder)
 
-    def _save_num_speakers(self, folder, n: int) -> None:
-        """Grava num_speakers no meta.json (o subprocesso de processamento o lê)."""
+    def _save_num_speakers(self, folder, n: int, key: str = "num_speakers") -> None:
+        """Grava num_speakers (ou num_speakers_mic, motor novo) no meta.json (o subprocesso
+        de processamento o lê)."""
         import json
         from pathlib import Path
 
         meta_path = Path(folder) / "meta.json"
         try:
             meta = json.loads(meta_path.read_text(encoding="utf-8"))
-            meta["num_speakers"] = int(n)
+            meta[key] = int(n)
             util.atomic_write_text(meta_path, json.dumps(meta, ensure_ascii=False, indent=2))
-            log.info("nº de participantes informado (%d): %s", n, getattr(folder, "name", folder))
+            log.info("%s informado (%d): %s", key, n, getattr(folder, "name", folder))
         except Exception:
-            log.exception("não consegui gravar num_speakers no meta de %s", getattr(folder, "name", folder))
+            log.exception("não consegui gravar %s no meta de %s", key, getattr(folder, "name", folder))
 
     def _on_title(self, title: str) -> None:
         """Título estável capturado durante a gravação (#35): preenche meeting_title
