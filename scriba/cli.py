@@ -144,6 +144,14 @@ def main(argv: list[str] | None = None) -> int:
         "offset", help="ponto do corte relativo ao início: HH:MM:SS, MM:SS ou SS"
     )
 
+    p_eu = sub.add_parser(
+        "cadastrar-eu",
+        help="cadastra a sua voz como \"Eu\" a partir do microfone de calls em que só você falava nele",
+    )
+    p_eu.add_argument("folders", type=Path, nargs="+", metavar="PASTA")
+    p_eu.add_argument("--conferir", action="store_true", help="só confere se as pastas servem, sem gravar")
+    p_eu.add_argument("--cpu", action="store_true", help="separa as vozes em CPU")
+
     sub.add_parser("devices", help="lista dispositivos de áudio (microfone e loopback)")
 
     # infraestrutura, não comando de usuário (SUPPRESS): a sonda de áudio roda em
@@ -291,6 +299,12 @@ def main(argv: list[str] | None = None) -> int:
         return summarize_folder(args.folder)
     if args.cmd == "split":
         return cmd_split(args)
+    if args.cmd == "cadastrar-eu":
+        from . import config, motor_novo
+
+        ok = motor_novo.cadastrar_eu(args.folders, config.load().diarization, force_cpu=args.cpu,
+                                     gravar=not args.conferir)
+        return 0 if ok else 1
     if args.cmd == "process":
         from . import addons
 

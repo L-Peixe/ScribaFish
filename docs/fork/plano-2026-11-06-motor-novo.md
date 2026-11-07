@@ -32,7 +32,11 @@ grava é a voz que mais fala entre as **não reconhecidas**; o resto vira "Pesso
 (com `"mic": true`) para o "Quem é cada voz?" nomear. O cadastro **não tem a voz do Lucas** (o app nunca cadastra o
 "Eu"); na call de 05/11 quem resolveu foi a Giovana reconhecida (parecença 0,83), porque ela falou mais que o Lucas
 (305 s × 265 s): pelo critério de "quem mais fala", sem o cadastro dela, os dois sairiam trocados. A entrada "Eu" é ignorada
-no loopback. Com 1 pessoa no mic ou motor clássico, nada muda. O "Eu" no cadastro ainda não tem como ser criado (pendente).
+no loopback. Com 1 pessoa no mic ou motor clássico, nada muda. O "Eu" entra no cadastro por um comando de uma vez
+(decisão do Lucas, 07/11), `scribadev cadastrar-eu PASTA... [--conferir]` (`motor_novo.cadastrar_eu`): lê só o microfone
+de calls antigas, separa as vozes sem travar o número e cadastra a principal, pulando a pasta em que outra voz tem mais
+de 15% da fala, a que o cadastro reconhece como outra pessoa e a que não bate com o "Eu" já cadastrado. Só cadastrar
+com o `APP` já atualizado: o código de antes da etapa 5 não sabe que o "Eu" é do mic e poderia dá-lo a uma voz do loopback.
 
 **De onde o app roda:** o app que grava as calls roda do `../APP`, um clone do `main` do ScribaFish (instalação
 editável no venv do ScribaDev: `pip install -e ../APP --no-deps`), com `motor = 'novo'` no
@@ -151,15 +155,10 @@ Cada etapa mede na bancada antes de ligar: palavras, falas com a voz certa (gaba
 
 1. **Bancada de medição.** `bancada/vozes_por_palavra.py` + gabaritos locais: uma call de 27 min (3 vozes no
    loopback, falas atribuídas pelo conteúdo), uma gravação de celular de 1h29 (4 vozes nomeadas) e uma call de 48 min.
-2–3. ✅ feitas (ver "Status" e o changelog).
+2–3, 5. ✅ feitas (ver "Status" e o changelog).
 4. **Os três modos de velocidade:** rápido (turbo em lote, com palavras), completo (o método do laboratório:
    `large-v3`, contexto, 2ª passada, defesas) e os dois em sequência (a nota rápida sai, a completa a substitui).
    Escolha na configuração e na janela do fim da call; "os dois" marcado.
-5. **Vozes no microfone:** a janela do fim da call pergunta quantas pessoas do outro lado e do seu lado; com mais de
-   uma do seu lado, o microfone também passa pela separação, e a voz do Lucas é reconhecida pelo cadastro. **Caso
-   real para medir:** call de 05/11 19h58 (35 min), o Lucas e a Giovana no mesmo microfone e a Roberta do outro lado;
-   hoje o app põe tudo do mic como "Eu". Áudio copiado em `LAB-TRANSCRICAO/gabarito/audio/2026-11-05-roberta-mic-com-2/`;
-   falta o gabarito (falas de cada um no mic). A Giovana já está no cadastro de vozes do app (`speakers.json`).
 6. **Clientes e vocabulário:** na configuração inicial, o Claude (CLI, assinatura do Lucas) lê a pasta de trabalho
    (ex.: a pasta onde ficam os repositórios), propõe um cliente por repositório/pasta com nomes e termos; o Lucas revisa. No fim da call,
    marca um ou mais clientes; o contexto e os nomes deles entram no `initial_prompt` (não em `hotwords`: o eco da lista,
@@ -202,3 +201,6 @@ Cada etapa mede na bancada antes de ligar: palavras, falas com a voz certa (gaba
 - **2026-11-07** — etapa 5 no app, atrás do motor novo: a janela do fim da call pergunta as pessoas no mic, o mic com 2+
   passa pela separação, a voz de quem grava segue "Eu". Call de 05/11 19h58: 14 de 15 falas do mic com o nome certo,
   contra 5 do app instalado. Achado: o cadastro de vozes não tem a voz do Lucas.
+- **2026-11-07** — PR #2 mergeado. Comando `cadastrar-eu` para pôr a voz do Lucas no cadastro como "Eu". Conferido em
+  5 calls (18 min de placa): 3 servem (28/10 16h08, 13/10 16h03, 23/10 10h01); a de 05/11 19h58 foi recusada (outra voz
+  com 272 s de 570 s: a Giovana) e a de 04/11 12h14 também (215 s de 753 s).

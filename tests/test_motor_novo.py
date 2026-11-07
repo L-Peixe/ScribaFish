@@ -452,5 +452,99 @@ class JanelaDoFimDaCallTests(unittest.TestCase):
         self.assertIsNone(vistos["on_mic"])
 
 
+class CadastrarEuTests(unittest.TestCase):
+    """`cadastrar-eu`: a voz de quem grava entra no cadastro como "Eu" só de call sozinho no mic."""
+
+    EU_VOZ = [1.0, 0.0, 0.0]
+    GIOVANA = {"name": "Giovana", "embedding": [0.0, 1.0, 0.0], "n": 1}
+
+    def setUp(self):
+        from scriba import speakers
+
+        self.tmp = Path(tempfile.mkdtemp(prefix="scriba_eu_"))
+        p = mock.patch.object(speakers, "STORE_PATH", self.tmp / "speakers.json")
+        p.start()
+        self.addCleanup(p.stop)
+
+    def _pasta(self, meta_extra=None):
+        d = Path(tempfile.mkdtemp(prefix="pasta_", dir=self.tmp))
+        meta = {"status": "done", "streams": {"mic": {"file": "mic.opus", "offset_seconds": 0.0}}}
+        meta.update(meta_extra or {})
+        (d / "meta.json").write_text(json.dumps(meta), encoding="utf-8")
+        (d / "mic.opus").write_bytes(b"\x00" * 80)
+        return d
+
+    def _rodar(self, pastas, turns=None, embeddings=None, store=None, gravar=True):
+        import scriba.diarize as diarize_mod
+        from scriba import speakers
+
+        if store is not None:
+            speakers.save_store(store)
+        chamadas, saida = [], []
+
+        def _fake_diarize(wav, dz_cfg, num_speakers=None, **kw):
+            chamadas.append(num_speakers)
+            return diarize_mod.DiarizationResult(
+                turns=turns or [(0.0, 300.0, "S0")],
+                embeddings=embeddings or {"S0": self.EU_VOZ})
+
+        cfg = config.Diarization(enabled=True, hf_token="t", only_on_ac=False)
+        with mock.patch.object(diarize_mod, "diarize", _fake_diarize):
+            ok = motor_novo.cadastrar_eu(pastas, cfg, gravar=gravar, saida=saida.append)
+        return ok, chamadas, saida, {e["name"]: e for e in speakers.load_store()}
+
+    def test_sozinho_no_mic_cadastra_eu(self):
+        ok, chamadas, _saida, store = self._rodar([self._pasta()])
+        self.assertEqual(ok, 1)
+        self.assertEqual(chamadas, [None])  # número de vozes livre: é assim que aparece outra pessoa
+        self.assertEqual(store["Eu"]["embedding"], self.EU_VOZ)
+
+    def test_eco_curto_nao_atrapalha(self):
+        ok, _c, _s, store = self._rodar([self._pasta()], turns=[(0.0, 300.0, "S0"), (300.0, 310.0, "S1")],
+                                        embeddings={"S0": self.EU_VOZ, "S1": [0.0, 0.0, 1.0]})
+        self.assertEqual(ok, 1)
+        self.assertEqual(store["Eu"]["embedding"], self.EU_VOZ)
+
+    def test_outra_pessoa_no_mic_pula(self):
+        ok, _c, saida, store = self._rodar([self._pasta()], turns=[(0.0, 200.0, "S0"), (200.0, 300.0, "S1")],
+                                           embeddings={"S0": self.EU_VOZ, "S1": [0.0, 0.0, 1.0]})
+        self.assertEqual(ok, 0)
+        self.assertNotIn("Eu", store)
+        self.assertIn("mais alguém", saida[0])
+
+    def test_call_marcada_com_2_no_mic_nem_separa(self):
+        ok, chamadas, _s, store = self._rodar([self._pasta({"num_speakers_mic": 2})])
+        self.assertEqual((ok, chamadas), (0, []))
+        self.assertNotIn("Eu", store)
+
+    def test_voz_de_pessoa_cadastrada_pula(self):
+        ok, _c, saida, store = self._rodar([self._pasta()], embeddings={"S0": [0.1, 1.0, 0.0]},
+                                           store=[dict(self.GIOVANA)])
+        self.assertEqual(ok, 0)
+        self.assertNotIn("Eu", store)
+        self.assertIn("Giovana", saida[0])
+
+    def test_reforca_o_eu_parecido_e_pula_o_diferente(self):
+        eu = {"name": "Eu", "embedding": [1.0, 0.1, 0.0], "n": 1}
+        ok, _c, _s, store = self._rodar([self._pasta()], store=[eu])
+        self.assertEqual((ok, store["Eu"]["n"]), (1, 2))
+        ok, _c, saida, store = self._rodar([self._pasta()], embeddings={"S0": [0.0, 0.0, 1.0]})
+        self.assertEqual((ok, store["Eu"]["n"]), (0, 2))
+        self.assertIn("não bate", saida[0])
+
+    def test_conferir_nao_grava(self):
+        ok, _c, saida, store = self._rodar([self._pasta()], gravar=False)
+        self.assertEqual(ok, 1)
+        self.assertEqual(store, {})
+        self.assertTrue(saida[0].startswith("serve"))
+
+    def test_sem_audio_do_mic_pula(self):
+        d = self._pasta()
+        (d / "mic.opus").unlink()
+        ok, chamadas, saida, _store = self._rodar([d])
+        self.assertEqual((ok, chamadas), (0, []))
+        self.assertIn("microfone não está", saida[0])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

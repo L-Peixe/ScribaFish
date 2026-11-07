@@ -242,6 +242,85 @@ def vozes_do_mic(wav, segments: list[Segment], cfg: Diarization, num_speakers: i
     return falas, vozes
 
 
+FATIA_MINIMA_EU = 0.85  # parte da fala do mic que a voz principal precisa ter para virar "Eu"
+
+
+class SemVozDoMic(Exception):
+    """A pasta não serve para cadastrar a voz de quem grava (o motivo vai na mensagem)."""
+
+
+def voz_de_quem_grava(folder, cfg: Diarization, force_cpu: bool = False) -> tuple[list[float], float]:
+    """A voz de quem grava, tirada do microfone de uma call em que só ele falava nele:
+    (impressão da voz, segundos de fala). Separa as vozes do mic sem travar o número; a
+    voz principal precisa ter FATIA_MINIMA_EU da fala (eco e ruído curtos não pesam),
+    senão havia outra pessoa no mic e a pasta não serve. Só lê a pasta."""
+    import json
+    from pathlib import Path
+
+    from . import diarize, util
+
+    folder = Path(folder)
+    try:
+        meta = json.loads((folder / "meta.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        raise SemVozDoMic("sem meta.json legível") from None
+    if int(meta.get("num_speakers_mic") or 1) > 1:
+        raise SemVozDoMic(f"a call marcou {meta['num_speakers_mic']} pessoas no microfone")
+    s = (meta.get("streams") or {}).get("mic")
+    wav = util.stream_file(folder, s) if s and s.get("file") else None
+    if wav is None:
+        raise SemVozDoMic("a gravação do microfone não está na pasta")
+    aviso: dict = {}
+    dz = diarize.diarize(wav, diarization_cfg(cfg), num_speakers=None, meta=aviso, force_cpu=force_cpu)
+    if not dz or not dz.turns:
+        raise SemVozDoMic(aviso.get("diarization_error") or "a separação de vozes não achou fala no microfone")
+    fala: dict[str, float] = {}
+    for a, b, label in dz.turns:
+        fala[label] = fala.get(label, 0.0) + (b - a)
+    total = sum(fala.values())
+    principal = max(fala, key=fala.get)
+    if total <= 0 or fala[principal] / total < FATIA_MINIMA_EU:
+        raise SemVozDoMic(f"outra voz falou {total - fala[principal]:.0f} s de {total:.0f} s no microfone: "
+                          "parece ter mais alguém")
+    if dz.embeddings.get(principal) is None:
+        raise SemVozDoMic("o modelo de vozes não devolveu a impressão da voz")
+    return dz.embeddings[principal], fala[principal]
+
+
+def cadastrar_eu(pastas, cfg: Diarization, force_cpu: bool = False, gravar: bool = True,
+                 saida: Callable[[str], None] = print) -> int:
+    """Cadastra (ou reforça) "Eu" no cadastro de vozes com o microfone de calls em que só
+    quem grava falava nele. Pula a pasta cuja voz o cadastro reconhece como outra pessoa
+    ou que não bate com o "Eu" já cadastrado. `gravar=False` só confere. Devolve quantas
+    pastas serviram."""
+    from . import speakers
+
+    ok = 0
+    for pasta in pastas:
+        try:
+            emb, segundos = voz_de_quem_grava(pasta, cfg, force_cpu)
+        except SemVozDoMic as e:
+            saida(f"pulei {pasta}: {e}")
+            continue
+        store = speakers.load_store()
+        eu = [e for e in store if str(e.get("name", "")).strip().lower() == EU.lower()]
+        outros = [e for e in store if e not in eu]
+        nome, score = speakers.match(emb, outros)
+        if nome:
+            saida(f"pulei {pasta}: a voz do microfone parece {nome} (parecença {score:.2f})")
+            continue
+        if eu and eu[0].get("embedding"):
+            parecido = speakers._cosine(emb, eu[0]["embedding"])
+            if parecido < speakers.DEFAULT_THRESHOLD:
+                saida(f"pulei {pasta}: a voz não bate com o \"Eu\" já cadastrado (parecença {parecido:.2f})")
+                continue
+        if gravar:
+            speakers.enroll(EU, emb)
+        ok += 1
+        saida(f"{'cadastrei' if gravar else 'serve'}: {pasta} ({segundos:.0f} s de fala)")
+    return ok
+
+
 def assign_words(segments: list[Segment], turns) -> tuple[dict[str, list[Segment]], dict[str, int]]:
     """Como `diarize.assign_speakers`, mas por palavra: cada palavra vai para a voz do turno
     que contém o meio dela, e a fala é cortada onde a voz muda ou há pausa > PAUSA_CORTA_S.
