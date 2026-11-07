@@ -40,8 +40,10 @@ com o `APP` já atualizado: o código de antes da etapa 5 não sabe que o "Eu" �
 
 **De onde o app roda:** o app que grava as calls roda do `../APP`, um clone do `main` do ScribaFish (instalação
 editável no venv do ScribaDev: `pip install -e ../APP --no-deps`), com `motor = 'novo'` no
-`%LOCALAPPDATA%\ScribaDev\config.toml`. A `APP` não se edita: ela só muda com PR mergeado + o botão "Atualizar" do app
-(`git pull --ff-only` nela). O trabalho em andamento fica na `FORK` e nunca chega às calls. **Desfazer:**
+`%LOCALAPPDATA%\ScribaDev\config.toml`. A `APP` não se edita: ela só muda com PR mergeado + o Lucas rodando
+`git pull --ff-only` nela e reabrindo o app. O botão "Atualizar" **não** traz os PRs do ScribaFish: ele compara o número
+da versão com o do repositório do Allan (`updates.REPO`) e, com os dois em 1.4.27, responde "já está na versão mais
+recente" (07/11, depois do merge do PR #2). O trabalho em andamento fica na `FORK` e nunca chega às calls. **Desfazer:**
 `pip install -e ../REPO --no-deps` no venv e `motor = 'classico'`; o `../REPO` (1.4.21, do Allan) ficou intacto, e a cópia
 dos bancos e do config de antes da troca está em `%LOCALAPPDATA%\ScribaDev\backup-2026-11-06-antes-do-fork`.
 
@@ -49,10 +51,11 @@ dos bancos e do config de antes da troca está em `%LOCALAPPDATA%\ScribaDev\back
 
 **Git:** `origin` = `git@github-lpeixe:L-Peixe/ScribaFish.git` (push pela chave SSH da L-Peixe, blueprint FREELAS
 §4.2), e-mail local `lucaspquimico@gmail.com`, push para o `upstream` desligado. PR **dentro do ScribaFish** (base
-`main`), nunca no repositório do Allan. O `gh` e o Chrome estão logados como `devsummus`: o PR o Lucas abre pelo link
-`compare/main...<branch>` (ou passa um token da L-Peixe, que se revoga depois). **Versões do Allan:** o Lucas clica em
+`main`), nunca no repositório do Allan. O `gh` e o Chrome estão logados como `devsummus`: o Claude abre o PR com o
+token da L-Peixe (blueprint FREELAS §4.2); o Auto-fix desses PRs o app não liga. **Versões do Allan:** o Lucas clica em
 "Sync fork" no GitHub do ScribaFish; se conflitar com o motor novo, o GitHub recusa e ele chama o Claude. O aviso de
-versão nova do app continua vindo do manifesto do Allan, mas o "Atualizar" só traz o que já está no ScribaFish.
+versão nova do app continua vindo do manifesto do Allan; quando houver versão nova dele, o "Atualizar" faz o `git pull`
+e traz junto o que estiver no `main` do ScribaFish.
 
 ## Medido
 
@@ -203,4 +206,5 @@ Cada etapa mede na bancada antes de ligar: palavras, falas com a voz certa (gaba
   contra 5 do app instalado. Achado: o cadastro de vozes não tem a voz do Lucas.
 - **2026-11-07** — PR #2 mergeado. Comando `cadastrar-eu` para pôr a voz do Lucas no cadastro como "Eu". Conferido em
   5 calls (18 min de placa): 3 servem (28/10 16h08, 13/10 16h03, 23/10 10h01); a de 05/11 19h58 foi recusada (outra voz
-  com 272 s de 570 s: a Giovana) e a de 04/11 12h14 também (215 s de 753 s).
+  com 272 s de 570 s: a Giovana) e a de 04/11 12h14 também (215 s de 753 s). Corrigido o "De onde o app roda": o
+  "Atualizar" não traz os PRs do ScribaFish (compara a versão com a do Allan); a `APP` se atualiza com `git pull`.
