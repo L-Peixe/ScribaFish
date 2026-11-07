@@ -215,3 +215,5 @@ Cada etapa mede na bancada antes de ligar: palavras, falas com a voz certa (gaba
   "Atualizar" não traz os PRs do ScribaFish (compara a versão com a do Allan); a `APP` se atualiza com `git pull`.
 - **2026-11-07** — decisão do Lucas: as versões do Allan não entram mais (nada de "Sync fork"); o que interessar dele, a
   pedido e por PR com teste.
+- **2026-11-07** — PR #3 mergeado e puxado na `APP`; a voz do Lucas entrou no cadastro como "Eu" pelas calls de 28/10,
+  13/10 e 23/10 (as três bateram entre si; parecença com as outras vozes cadastradas de 0,19 a 0,26).
