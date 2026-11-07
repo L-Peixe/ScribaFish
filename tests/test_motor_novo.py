@@ -425,7 +425,7 @@ class JanelaDoFimDaCallTests(unittest.TestCase):
         app = self._app(motor, d)
         vistos = {}
 
-        def _fake_ask(on_result, last_value=None, timeout_seconds=0, on_mic=None):
+        def _fake_ask(on_result, last_value=None, timeout_seconds=0, on_mic=None, **_clientes):
             vistos["on_mic"] = on_mic
             if on_mic is not None:
                 on_mic(mic)

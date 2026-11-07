@@ -10,7 +10,8 @@
 | 1. Bancada | ✅ `bancada/vozes_por_palavra.py` e o 1º gabarito (call de 27 min). ⏳ Faltam os gabaritos da gravação de celular de 1h29 e da call de 48 min |
 | 2. Voz por palavra | ✅ no app, atrás de `[whisper] motor = "novo"` (`scriba/motor_novo.py`) |
 | 3. Vozes com o modelo novo | ✅ `community-1` (`[diarization] model_novo`) pelos pedaços de 3 min de sempre, com a redução de vozes corrigida. 🚫 Áudio inteiro: não precisa (os pedaços deram 17 de 17 com 1,6 GB; o inteiro pede 8,9 GB) |
-| 4, 6, 7, 8 | ⏳ não começadas (avaliado em 06/11) |
+| 4, 7, 8 | ⏳ não começadas (avaliado em 06/11) |
+| 6. Clientes e vocabulário | ✅ no app atrás de `motor = "novo"` (ver "Clientes e vocabulário" abaixo). ⏳ Falta a leitura da pasta de verdade, com o Claude do Lucas (testada só com a IA de mentira) |
 | 10. Para outras pessoas usarem | ⏳ não começada (avaliado em 07/11): Mac, Atualizar pelo ScribaFish, cadastro da voz pela tela, instalação |
 | 5. Vozes no microfone | ✅ no app atrás de `motor = "novo"` e de 2+ pessoas no mic (ver "Vozes no microfone" abaixo); call de 05/11 19h58: 14 de 15 falas com o nome certo |
 | 9. GitHub pessoal | ✅ `L-Peixe/ScribaFish` (ver "Git") |
@@ -39,6 +40,27 @@ de calls antigas, separa as vozes sem travar o número e cadastra a principal, p
 de 15% da fala, a que o cadastro reconhece como outra pessoa e a que não bate com o "Eu" já cadastrado. Só cadastrar
 com o `APP` já atualizado: o código de antes da etapa 5 não sabe que o "Eu" é do mic e poderia dá-lo a uma voz do loopback.
 
+**Clientes e vocabulário (etapa 6):** com o motor novo, o **Whisper nunca recebe `hotwords`**. O vocabulário entra só
+pelos clientes marcados na call, como `initial_prompt` ("Reunião com X. <contexto>. Nomes: …", até 500 caracteres, porque
+o faster-whisper guarda só os últimos ~223 tokens). Os clientes ficam em `clientes.json`, na pasta de dados do app
+(`scriba/clientes.py`; nome, contexto, pessoas, termos, pastas). A aba **Clientes** das Configurações e o botão
+"Clientes…" do assistente aparecem só com o motor novo. Os dois têm "Ler pasta de trabalho…" (`scriba/pasta_clientes.py`):
+o app junta o que descreve cada subpasta (CLAUDE.md, README, AGENTS.md, HANDOFF, nome e descrição do `package.json`; lista
+de inclusão, ~6 KB por pasta, nunca `.env`) e o Claude roda **sem ferramentas** (`ai.complete`, como o resumo). Ele
+propõe os clientes, e a pessoa marca, edita e grava. Cliente que já existe se mescla, pelo nome ou por uma pasta em
+comum. No fim da call, a janela "Quantas vozes?" ganhou caixinhas dos clientes, já marcadas pelo título da call (nome
+ou pasta, palavra inteira). Sem resposta, fica o que o título sugeriu (`meta.json` → `clientes`; na CLI,
+`--clientes id,id`).
+
+**A defesa** fica em `scriba/defesa.py` e roda em cada trilha. Ela olha os segmentos em laço (a mesma frase de até 7
+palavras 4+ vezes), os que só repetem o vocabulário (≥70% das palavras, ou URL) e os que repetem 5 palavras seguidas
+do prompt. Esses são refeitos sem o prompt numa janela de ±10 s (`WordTranscriber.retranscrever`). O laço que
+sobra é cortado para uma vez só, e o eco que sobra sai. O resultado fica em `meta.json` → `defesa`. A lista global do
+app segue no `vocab_fix` (correção de grafia) e no resumo, somada aos termos dos clientes marcados. O vocabulário que
+aprende (do Allan, #227) passa a ser **por cliente**: termo novo de uma call com cliente marcado vira sugestão daquele
+cliente (Adicionar/Ignorar na aba Clientes); sem cliente, vai para a lista global, como antes. Com o motor clássico,
+nada muda.
+
 **De onde o app roda:** o app que grava as calls roda do `../APP`, um clone do `main` do ScribaFish (instalação
 editável no venv do ScribaDev: `pip install -e ../APP --no-deps`), com `motor = 'novo'` no
 `%LOCALAPPDATA%\ScribaDev\config.toml`. A `APP` não se edita: ela só muda com PR mergeado + o Lucas rodando
@@ -48,7 +70,8 @@ recente" (07/11, depois do merge do PR #2). O trabalho em andamento fica na `FOR
 `pip install -e ../REPO --no-deps` no venv e `motor = 'classico'`; o `../REPO` (1.4.21, do Allan) ficou intacto, e a cópia
 dos bancos e do config de antes da troca está em `%LOCALAPPDATA%\ScribaDev\backup-2026-11-06-antes-do-fork`.
 
-**Próximo passo:** conferir a primeira call real com o motor novo; depois, a etapa 4 (os três modos de velocidade).
+**Próximo passo:** conferir a primeira call real com o motor novo e a primeira leitura da pasta de trabalho (aba
+Clientes); depois, a etapa 4 (os três modos de velocidade).
 
 **Git:** `origin` = `git@github-lpeixe:L-Peixe/ScribaFish.git` (push pela chave SSH da L-Peixe, blueprint FREELAS
 §4.2), e-mail local `lucaspquimico@gmail.com`, push para o `upstream` desligado. PR **dentro do ScribaFish** (base
@@ -102,6 +125,19 @@ confirmados pelo Lucas):
 O loopback seguiu igual (a Roberta reconhecida pelo cadastro). Sobram falas picotadas onde as duas vozes se alternam
 em menos de 1 s ("O tópico é a / sua vida de veterinário, / minha mãe"); suavizar isso pede gabarito maior.
 
+**07/11 — clientes e defesa, mesma call de 05/11 19h58** (pior caso de propósito: um cliente "Summus" com os 27 termos
+da lista antiga, a que fazia o laço, marcado na call; prompt de 378 caracteres; janela 9min49s–11min32s do mic, onde o
+app instalado deu "Google Tag Manager" ×54):
+
+| Rodada | Falas em laço | O que saiu na janela | Falas do mic com o nome certo | Tempo |
+|---|---|---|---|---|
+| Lista antiga como `hotwords` (o jeito de antes) | 4 | "MediBri. MediBri.…" (×45 na trilha) | 14 de 15 | 323 s |
+| Termos no `initial_prompt`, sem a defesa | 1 | "Agência de bris. Agência de bris.…" (o contexto do prompt em laço) | 14 de 15 | 313 s |
+| **Termos no `initial_prompt` + defesa** | **0** | **a fala real** ("Tá, agora sobre a exportação. Com que frequência aparece esse tipo de demanda?") | **14 de 15** | **343 s** |
+
+O prompt sozinho não basta: no silêncio do mic o Whisper repete o próprio prompt. A defesa achou 1 trecho suspeito,
+refez sem o prompt e não precisou cortar nem apagar nada. Custa ~30 s numa call de 35 min.
+
 ## Por que o fork
 
 O ScribaDev grava bem (detecção da call, duas trilhas, pílula, notas, resumo, apontamentos). O defeito está no
@@ -144,6 +180,9 @@ inteiro com o nº de vozes, e o nome de cada voz dado pelo conteúdo.
   segura disso"*. Nada de "Sync fork"; o que interessar do Allan entra a pedido do Lucas, num PR com teste.
 - **Lista de termos (`hotwords`):** *"A agora, B depois"*: esvaziada no config do app em 06/11 (no silêncio do mic o
   Whisper devolvia a lista em laço); a defesa no motor entra com a etapa 6.
+- **Clientes (07/11, múltipla escolha, as quatro recomendadas):** cadastro em **"Arquivo próprio"** (`clientes.json` e
+  tela Clientes, não a tabela de clientes dos apontamentos). Ler a pasta: **"App coleta, Claude sem ferramentas"**. Fim
+  da call: **"Caixinhas na janela de vozes"**. Vocabulário que aprende: **"Por cliente"**.
 
 ## Regras do fork
 
@@ -168,17 +207,10 @@ Cada etapa mede na bancada antes de ligar: palavras, falas com a voz certa (gaba
 
 1. **Bancada de medição.** `bancada/vozes_por_palavra.py` + gabaritos locais: uma call de 27 min (3 vozes no
    loopback, falas atribuídas pelo conteúdo), uma gravação de celular de 1h29 (4 vozes nomeadas) e uma call de 48 min.
-2–3, 5. ✅ feitas (ver "Status" e o changelog).
+2–3, 5, 6. ✅ feitas (ver "Status" e o changelog).
 4. **Os três modos de velocidade:** rápido (turbo em lote, com palavras), completo (o método do laboratório:
    `large-v3`, contexto, 2ª passada, defesas) e os dois em sequência (a nota rápida sai, a completa a substitui).
    Escolha na configuração e na janela do fim da call; "os dois" marcado.
-6. **Clientes e vocabulário:** na configuração inicial, o Claude (CLI, assinatura do Lucas) lê a pasta de trabalho
-   (ex.: a pasta onde ficam os repositórios), propõe um cliente por repositório/pasta com nomes e termos; o Lucas revisa. No fim da call,
-   marca um ou mais clientes; o contexto e os nomes deles entram no `initial_prompt` (não em `hotwords`: o eco da lista,
-   APRENDIZADOS). Aproveita o vocabulário que aprende do Allan (#227). **Defesa:** trecho em laço ou que só repete o
-   vocabulário é retranscrito sem ele (medir com a call de 05/11 19h58: "Google Tag Manager" ×54 no mic, 9min49s a
-   11min32s). A lista do app está vazia desde 06/11 (a de antes, no backup do config); a correção de grafia do Allan
-   (`vocab_fix`) usa a mesma lista e está sem termos até esta etapa.
 7. **Nome das vozes:** cadastro de voz primeiro; as que sobrarem, o Claude propõe pelo conteúdo, com os participantes
    do cliente; o Lucas confirma na tela de vozes.
 8. **Importar áudio de celular:** arrastar um arquivo → vira uma reunião de uma trilha, com o nº de pessoas.
@@ -232,3 +264,8 @@ Cada etapa mede na bancada antes de ligar: palavras, falas com a voz certa (gaba
   13/10 e 23/10 (as três bateram entre si; parecença com as outras vozes cadastradas de 0,19 a 0,26).
 - **2026-11-07** — regra nova: o fork é para qualquer pessoa, Windows e Mac. Entrou a etapa 10 (o que falta para a
   Giovana e o Bruno usarem; o motor novo hoje não roda no Mac com MLX).
+- **2026-11-07** — etapa 6 no app, atrás do motor novo: clientes (`clientes.json`, aba Clientes, leitura da pasta de
+  trabalho pelo Claude sem ferramentas), caixinhas de cliente na janela do fim da call, vocabulário dos marcados no
+  `initial_prompt` (o Whisper não recebe mais `hotwords`), defesa contra laço e eco, vocabulário que aprende por
+  cliente. Call de 05/11 19h58 com a lista antiga num cliente: 0 laços e a fala real de volta (com `hotwords`, 4 laços;
+  só com o prompt, 1).

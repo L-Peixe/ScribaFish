@@ -10,11 +10,21 @@ Uso (PowerShell, no venv do ScribaDev, de dentro do FORK):
 Gabarito com "trilha": "mic" (etapa 5, vozes no microfone): mede as falas do mic, põe "vozes_mic" no meta da cópia
 (num_speakers_mic) e, com "rotulo" ({pessoa: rótulo esperado, ex. "Eu"}), conta também as falas com o NOME certo.
 --so-medir: não roda o pipeline, só mede o transcript.json que já está na cópia.
+
+Etapa 6 (vocabulário e a defesa contra o laço):
+    --hotwords ARQ    roda com a lista de termos do arquivo como `hotwords` (o jeito de antes de 06/11)
+    --clientes ARQ    um clientes.json; os clientes de "marcar": [ids] vão para o meta da cópia
+    --contar FRASE    conta a frase em toda a transcrição (o eco da lista: "Google Tag Manager")
+    --janela A-B      mede as palavras do mic entre A e B segundos (onde o laço apagava a fala)
+    --sem-defesa      desliga a defesa (para ver o que o prompt sozinho faz)
+Com qualquer um deles, a medida ganha "eco": a contagem, as falas em laço e as palavras da janela.
+Os arquivos ficam fora do git (a lista de termos de alguém e os clientes dele são dados da máquina).
 """
 from __future__ import annotations
 
 import dataclasses
 import json
+import re
 import shutil
 import sys
 import time
@@ -48,16 +58,56 @@ def medir_pasta(pasta: Path, gab: dict) -> dict:
     return m
 
 
+_LACO = re.compile(r"(\b[\w'’,.?!-]+(?:\s+[\w'’,.?!-]+){0,6}?)(?:[\s,.…]+\1){3,}", re.IGNORECASE)
+
+
+def medir_eco(pasta: Path, frase: str | None, janela: tuple[float, float] | None) -> dict:
+    """O eco do vocabulário: quantas vezes a frase aparece, quantas falas estão em laço e o que o mic tem na janela."""
+    turns = json.loads((pasta / "transcript.json").read_text(encoding="utf-8"))
+    meta = json.loads((pasta / "meta.json").read_text(encoding="utf-8"))
+    out: dict = {"falas_em_laco": sum(1 for t in turns if _LACO.search(t["text"]))}
+    if frase:
+        out["contagem"] = {frase: sum(t["text"].lower().count(frase.lower()) for t in turns)}
+    if janela:
+        do_mic = {"Eu", *(meta.get("speakers_mic") or [])}
+        a, b = janela
+        dentro = [t for t in turns if t["speaker"] in do_mic and t["end"] > a and t["start"] < b]
+        out["janela"] = {"de_a_s": [a, b], "falas_do_mic": len(dentro),
+                         "palavras_do_mic": sum(len(t["text"].split()) for t in dentro)}
+    if meta.get("defesa"):
+        out["defesa"] = meta["defesa"]
+    return out
+
+
+def _opcao(args: list[str], nome: str) -> str | None:
+    """Tira `nome VALOR` de args e devolve o VALOR (None se não veio)."""
+    if nome not in args:
+        return None
+    i = args.index(nome)
+    valor = args[i + 1]
+    del args[i:i + 2]
+    return valor
+
+
 def main() -> int:
     gab = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
     dest = Path(sys.argv[2])
     so_medir = "--so-medir" in sys.argv
-    args = [a for a in sys.argv if a != "--so-medir"]
+    sem_defesa = "--sem-defesa" in sys.argv
+    args = [a for a in sys.argv if a not in ("--so-medir", "--sem-defesa")]
+    hotwords_arq = _opcao(args, "--hotwords")
+    clientes_arq = _opcao(args, "--clientes")
+    frase = _opcao(args, "--contar")
+    janela_txt = _opcao(args, "--janela")
+    janela = tuple(float(x) for x in janela_txt.split("-")) if janela_txt else None
+    eco = bool(hotwords_arq or clientes_arq or frase or janela)
     motor = args[3] if len(args) > 3 else "novo"
     chunk = int(args[4]) if len(args) > 4 else None
     orig = Path(gab["audio"]).parent
     if so_medir:
         out = {"motor": motor, "esta_rodada": medir_pasta(dest, gab)}
+        if eco:
+            out["eco"] = medir_eco(dest, frase, janela)
         if (orig / "transcript.json").exists():
             out["app_instalado"] = medir_pasta(orig, gab)
         print(json.dumps(out, ensure_ascii=False, indent=1))
@@ -72,6 +122,10 @@ def main() -> int:
     meta["status"] = "recorded"
     if gab.get("vozes_mic"):
         meta["num_speakers_mic"] = int(gab["vozes_mic"])
+    meta.pop("clientes", None)
+    meta.pop("defesa", None)
+    if clientes_arq:
+        meta["clientes"] = list(json.loads(Path(clientes_arq).read_text(encoding="utf-8")).get("marcar") or [])
     (dest / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
     (dest / "transcript.json").unlink(missing_ok=True)
 
@@ -79,8 +133,19 @@ def main() -> int:
     dz = dataclasses.replace(real.diarization, enabled=True, only_on_ac=False)
     if chunk is not None:
         dz = dataclasses.replace(dz, chunk_minutes=chunk)
-    cfg = dataclasses.replace(real, whisper=dataclasses.replace(real.whisper, motor=motor), diarization=dz)
+    whisper = dataclasses.replace(real.whisper, motor=motor)
+    if hotwords_arq:
+        whisper = dataclasses.replace(whisper, hotwords=Path(hotwords_arq).read_text(encoding="utf-8").strip())
+    cfg = dataclasses.replace(real, whisper=whisper, diarization=dz)
     pipeline.load = lambda: cfg
+    if clientes_arq:
+        from scriba import clientes as clientes_mod
+
+        clientes_mod.ARQUIVO = Path(clientes_arq)   # o cadastro da bancada, não o do app
+    if sem_defesa:
+        from scriba import defesa
+
+        defesa.defender = lambda tr, wav, segs, *a, **k: (segs, defesa.Resultado())
     t0 = time.time()
     rc = pipeline.transcribe_folder(dest)
     print(f"rc={rc} em {time.time() - t0:.0f} s, motor={motor}, chunk_minutes={dz.chunk_minutes}", flush=True)
@@ -91,6 +156,8 @@ def main() -> int:
         return rc
 
     out = {"motor": motor, "esta_rodada": medir_pasta(dest, gab)}
+    if eco:
+        out["eco"] = medir_eco(dest, frase, janela)
     if (orig / "transcript.json").exists():
         out["app_instalado"] = medir_pasta(orig, gab)
     print(json.dumps(out, ensure_ascii=False, indent=1))

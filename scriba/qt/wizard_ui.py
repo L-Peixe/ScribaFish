@@ -140,6 +140,25 @@ class WizardWindow(QWidget):
             cl.addWidget(self._timesheet_opt)
             root.addWidget(card)
 
+        # clientes da pasta de trabalho (fork, etapa 6): só com o motor novo, que leva o
+        # vocabulário de cada cliente ao Whisper
+        self._clientes_painel = None
+        try:
+            from .. import config as _config, motor_novo
+
+            com_clientes = motor_novo.ativo(_config.load().whisper)
+        except Exception:
+            com_clientes = False
+        if com_clientes:
+            row = QHBoxLayout()
+            lb = widgets.WrapLabel("Clientes: o Claude lê a sua pasta de trabalho e propõe um cliente por "
+                                   "repositório ou pasta, com nomes e termos; no fim de cada call você marca "
+                                   "os clientes e o vocabulário deles guia a transcrição.")
+            lb.setProperty("role", "muted")
+            row.addWidget(lb, 1)
+            row.addWidget(widgets.ModernButton("Clientes…", self._abrir_clientes))
+            root.addLayout(row)
+
         btns = QHBoxLayout()
         self._ai_btn = widgets.ModernButton("Gerar com IA (recomendado)", self._generate_ai, kind="primary")
         self._tpl_btn = widgets.ModernButton("Usar modelo pronto", self._generate_template)
@@ -160,6 +179,18 @@ class WizardWindow(QWidget):
 
         self._prompt_ready.connect(self._on_prompt)
         self._jargon_ready.connect(self._on_jargon)
+
+    def _abrir_clientes(self) -> None:
+        """A tela de clientes numa janela própria, já pedindo a pasta de trabalho."""
+        from .clientes_ui import ClientesPainel
+
+        if self._clientes_painel is None:
+            self._clientes_painel = ClientesPainel()
+            self._clientes_painel.setWindowTitle("ScribaDev — Clientes")
+            self._clientes_painel.setMinimumSize(640, 420)
+        self._clientes_painel.show()
+        widgets.bring_to_front(self._clientes_painel)
+        self._clientes_painel.escolher_pasta()
 
     # -- blocos --------------------------------------------------------------
 

@@ -404,7 +404,57 @@ class ScribaApp:
         if dz.enabled and dz.ask_speakers and not self._meta_has_speakers(folder):
             self.ui(lambda: self._ask_speakers_then_enqueue(folder))
         else:
+            # sem a janela (motor novo, etapa 6): fica o cliente que o título da call sugere
+            self._save_clientes(folder, self._clientes_pelo_titulo(folder)[1], so_se_vazio=True)
             self.jobs.put(folder)
+
+    def _clientes_pelo_titulo(self, folder) -> tuple[list[tuple[str, str]], list[str]]:
+        """(clientes para a janela [(id, nome)], ids que o título da call sugere). Vazio fora
+        do motor novo ou sem clientes cadastrados."""
+        import json
+        from pathlib import Path
+
+        from . import clientes, motor_novo
+
+        try:
+            if not motor_novo.ativo(self.cfg.whisper):
+                return [], []
+            lista = clientes.ordenados()
+            if not lista:
+                return [], []
+            try:
+                meta = json.loads((Path(folder) / "meta.json").read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                meta = {}
+            titulo = " ".join(str(meta.get(k) or "") for k in ("meeting_title", "title"))
+            return [(c["id"], c["nome"]) for c in lista], clientes.sugerir_pelo_titulo(titulo, lista)
+        except Exception:
+            log.exception("clientes: não consegui montar a lista da call")
+            return [], []
+
+    def _save_clientes(self, folder, ids: list[str], so_se_vazio: bool = False) -> None:
+        """Grava os clientes da call no meta.json (o pipeline monta o vocabulário com eles)."""
+        import json
+        from pathlib import Path
+
+        from . import clientes
+
+        meta_path = Path(folder) / "meta.json"
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            if so_se_vazio and meta.get("clientes"):
+                return
+            if ids:
+                meta["clientes"] = list(ids)
+            elif so_se_vazio:
+                return
+            else:
+                meta.pop("clientes", None)
+            util.atomic_write_text(meta_path, json.dumps(meta, ensure_ascii=False, indent=2))
+            clientes.marcar_uso(ids)
+            log.info("clientes da call (%s): %s", getattr(folder, "name", folder), ", ".join(ids) or "nenhum")
+        except Exception:
+            log.exception("não consegui gravar os clientes no meta de %s", getattr(folder, "name", folder))
 
     def _meta_has_speakers(self, folder) -> bool:
         """True se o meta da gravação já tem num_speakers (definido na pílula, #13)."""
@@ -435,11 +485,14 @@ class ScribaApp:
             from . import motor_novo
 
             last = util.read_state().get("last_num_speakers")
+            lista, sugeridos = self._clientes_pelo_titulo(folder)
             ask_num_speakers(
                 done,
                 last_value=last if isinstance(last, int) else None,
                 timeout_seconds=int(self.cfg.diarization.ask_speakers_timeout or 0),
                 on_mic=mic if motor_novo.ativo(self.cfg.whisper) else None,
+                clientes=lista or None, marcados=sugeridos,
+                on_clientes=(lambda ids: self._save_clientes(folder, ids)) if lista else None,
             )
         except Exception:
             log.exception("janela de nº de participantes falhou — enfileirando direto")

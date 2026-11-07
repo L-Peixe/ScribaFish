@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QScrollArea,
     QVBoxLayout,
     QWidget,
 )
@@ -96,13 +97,21 @@ class AskNumSpeakers(QWidget):
 
     Com `on_mic` (motor novo do fork), pergunta também quantas pessoas estão no seu
     microfone, contando você (padrão 1), e chama on_mic(int ≥ 1) logo antes de on_result,
-    em qualquer saída (confirmar, automático, tempo esgotado, X)."""
+    em qualquer saída (confirmar, automático, tempo esgotado, X).
+
+    Com `clientes` [(id, nome)] e `on_clientes` (motor novo, etapa 6), mostra uma caixinha por
+    cliente, já marcadas as de `marcados` (o título da call sugere), e chama on_clientes(ids)
+    antes de on_result em qualquer saída: sem resposta, fica o que estava marcado."""
 
     def __init__(self, on_result: Callable[[int | None], None], last_value: int | None = None,
-                 timeout_seconds: int = 90, on_mic: Callable[[int], None] | None = None):
+                 timeout_seconds: int = 90, on_mic: Callable[[int], None] | None = None,
+                 clientes: list[tuple[str, str]] | None = None, marcados=(),
+                 on_clientes: Callable[[list[str]], None] | None = None):
         super().__init__()
         self._on_result = on_result
         self._on_mic = on_mic
+        self._on_clientes = on_clientes
+        self._caixas: list[tuple[str, QCheckBox]] = []
         self._done = False
         self._left = int(timeout_seconds or 0)
 
@@ -146,6 +155,29 @@ class AskNumSpeakers(QWidget):
             self._mic_entry.setStyleSheet(f"font-size:{theme.zpt(16)}pt; font-weight:bold;")
             self._mic_entry.returnPressed.connect(self._confirm)
             lay.addWidget(self._mic_entry)
+
+        if clientes and on_clientes is not None:
+            cq = QLabel("De quais clientes era a reunião?")
+            cq.setStyleSheet("font-weight:bold;"); cq.setWordWrap(True)
+            lay.addWidget(cq)
+            csub = QLabel("Os nomes e termos deles ajudam a transcrição. Nenhum marcado: "
+                          "transcreve sem vocabulário.")
+            csub.setProperty("role", "muted"); csub.setWordWrap(True)
+            csub.setStyleSheet(f"font-size:{theme.active().font_size_small}pt;")
+            lay.addWidget(csub)
+            caixa = QWidget()
+            col = QVBoxLayout(caixa); col.setContentsMargins(0, 0, 0, 0); col.setSpacing(2)
+            marcados = set(marcados or ())
+            for cid, nome in clientes:
+                cb = QCheckBox(nome)
+                cb.setChecked(cid in marcados)
+                col.addWidget(cb)
+                self._caixas.append((cid, cb))
+            rolagem = QScrollArea()
+            rolagem.setWidgetResizable(True); rolagem.setFrameShape(QScrollArea.NoFrame)
+            rolagem.setWidget(caixa)
+            rolagem.setMaximumHeight(min(180, 26 * len(clientes) + 6))
+            lay.addWidget(rolagem)
 
         btns = QHBoxLayout()
         self._confirm_btn = widgets.ModernButton("Confirmar", self._confirm, kind="primary")
@@ -191,12 +223,20 @@ class AskNumSpeakers(QWidget):
         s = self._mic_entry.text().strip() if self._mic_entry is not None else ""
         return int(s) if s.isdigit() and int(s) >= 1 else 1
 
+    def clientes_marcados(self) -> list[str]:
+        return [cid for cid, cb in self._caixas if cb.isChecked()]
+
     def _report_mic(self) -> None:
         if self._on_mic is not None:
             try:
                 self._on_mic(self._mic_value())
             except Exception:
                 log.exception("falha ao guardar o nº de pessoas no microfone")
+        if self._on_clientes is not None and self._caixas:
+            try:
+                self._on_clientes(self.clientes_marcados())
+            except Exception:
+                log.exception("falha ao guardar os clientes da call")
 
     def _finish(self, value: int | None) -> None:
         if self._done:
@@ -234,9 +274,12 @@ class AskNumSpeakers(QWidget):
 
 
 def ask_num_speakers(on_result: Callable[[int | None], None], last_value: int | None = None,
-                     timeout_seconds: int = 90, on_mic: Callable[[int], None] | None = None) -> AskNumSpeakers:
+                     timeout_seconds: int = 90, on_mic: Callable[[int], None] | None = None,
+                     clientes: list[tuple[str, str]] | None = None, marcados=(),
+                     on_clientes: Callable[[list[str]], None] | None = None) -> AskNumSpeakers:
     """Abre a janela (não-bloqueante) e devolve a instância (o chamador guarda a ref)."""
-    win = AskNumSpeakers(on_result, last_value, timeout_seconds, on_mic=on_mic)
+    win = AskNumSpeakers(on_result, last_value, timeout_seconds, on_mic=on_mic,
+                         clientes=clientes, marcados=marcados, on_clientes=on_clientes)
     win.show()
     return win
 
