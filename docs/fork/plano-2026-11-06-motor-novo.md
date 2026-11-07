@@ -106,6 +106,8 @@ inteiro com o nº de vozes, e o nome de cada voz dado pelo conteúdo.
 - **Motor novo no dia a dia:** *"Sim, aponta"*. De onde roda: *"Pasta própria APP"* (não direto na `FORK`, para o
   trabalho em andamento não chegar às calls).
 - **Versões do Allan:** *"Você clica em Sync fork"* (não um PR com teste antes).
+- **Lista de termos (`hotwords`):** *"A agora, B depois"*: esvaziada no config do app em 06/11 (no silêncio do mic o
+  Whisper devolvia a lista em laço); a defesa no motor entra com a etapa 6.
 
 ## Regras do fork
 
@@ -134,7 +136,10 @@ Cada etapa mede na bancada antes de ligar: palavras, falas com a voz certa (gaba
 6. **Clientes e vocabulário:** na configuração inicial, o Claude (CLI, assinatura do Lucas) lê a pasta de trabalho
    (ex.: a pasta onde ficam os repositórios), propõe um cliente por repositório/pasta com nomes e termos; o Lucas revisa. No fim da call,
    marca um ou mais clientes; o contexto e os nomes deles entram no `initial_prompt` (não em `hotwords`: o eco da lista,
-   APRENDIZADOS). Aproveita o vocabulário que aprende do Allan (#227).
+   APRENDIZADOS). Aproveita o vocabulário que aprende do Allan (#227). **Defesa:** trecho em laço ou que só repete o
+   vocabulário é retranscrito sem ele (medir com a call de 05/11 19h58: "Google Tag Manager" ×54 no mic, 9min49s a
+   11min32s). A lista do app está vazia desde 06/11 (a de antes, no backup do config); a correção de grafia do Allan
+   (`vocab_fix`) usa a mesma lista e está sem termos até esta etapa.
 7. **Nome das vozes:** cadastro de voz primeiro; as que sobrarem, o Claude propõe pelo conteúdo, com os participantes
    do cliente; o Lucas confirma na tela de vozes.
 8. **Importar áudio de celular:** arrastar um arquivo → vira uma reunião de uma trilha, com o nº de pessoas.
@@ -163,3 +168,6 @@ Cada etapa mede na bancada antes de ligar: palavras, falas com a voz certa (gaba
 - **2026-11-06** — PR #1 mergeado; o app das calls passou a rodar do `../APP` (clone do `main`), com `motor = 'novo'`
   (decisão do Lucas: pasta própria, para o trabalho da `FORK` não chegar às calls). Conferido pela instalação nova, com o
   config real: 17 de 17, 145 s, 1,59 GB. Versões do Allan entram pelo "Sync fork" do Lucas.
+- **2026-11-06** — a lista fixa de `hotwords` saiu do config do app: na call de 05/11 19h58 o Whisper a devolvia em laço
+  no silêncio do mic ("Google Tag Manager" ×54). Refeita pelo app (`scribadev process`, motor novo, sem a lista): zero
+  laços, a fala dos 100 s voltou. A defesa no motor entrou na etapa 6.
