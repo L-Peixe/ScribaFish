@@ -132,7 +132,10 @@ Cada etapa mede na bancada antes de ligar: palavras, falas com a voz certa (gaba
    `large-v3`, contexto, 2ª passada, defesas) e os dois em sequência (a nota rápida sai, a completa a substitui).
    Escolha na configuração e na janela do fim da call; "os dois" marcado.
 5. **Vozes no microfone:** a janela do fim da call pergunta quantas pessoas do outro lado e do seu lado; com mais de
-   uma do seu lado, o microfone também passa pela separação, e a voz do Lucas é reconhecida pelo cadastro.
+   uma do seu lado, o microfone também passa pela separação, e a voz do Lucas é reconhecida pelo cadastro. **Caso
+   real para medir:** call de 05/11 19h58 (35 min), o Lucas e a Giovana no mesmo microfone e a Roberta do outro lado;
+   hoje o app põe tudo do mic como "Eu". Áudio copiado em `LAB-TRANSCRICAO/gabarito/audio/2026-11-05-roberta-mic-com-2/`;
+   falta o gabarito (falas de cada um no mic). A Giovana já está no cadastro de vozes do app (`speakers.json`).
 6. **Clientes e vocabulário:** na configuração inicial, o Claude (CLI, assinatura do Lucas) lê a pasta de trabalho
    (ex.: a pasta onde ficam os repositórios), propõe um cliente por repositório/pasta com nomes e termos; o Lucas revisa. No fim da call,
    marca um ou mais clientes; o contexto e os nomes deles entram no `initial_prompt` (não em `hotwords`: o eco da lista,
@@ -171,3 +174,4 @@ Cada etapa mede na bancada antes de ligar: palavras, falas com a voz certa (gaba
 - **2026-11-06** — a lista fixa de `hotwords` saiu do config do app: na call de 05/11 19h58 o Whisper a devolvia em laço
   no silêncio do mic ("Google Tag Manager" ×54). Refeita pelo app (`scribadev process`, motor novo, sem a lista): zero
   laços, a fala dos 100 s voltou. A defesa no motor entrou na etapa 6.
+- **2026-11-06** — etapa 5 ganhou o caso real: a call de 05/11 19h58 tinha o Lucas e a Giovana no mesmo mic.
