@@ -115,11 +115,15 @@ SISTEMA = (
     "Você organiza a pasta de trabalho de uma pessoa em CLIENTES, para o reconhecimento de fala das "
     "reuniões dela. Recebe, para cada subpasta, o que a descreve. Agrupe as pastas por cliente (a "
     "empresa ou pessoa para quem o trabalho é feito; várias pastas podem ser do mesmo cliente). Pasta "
-    "que não é de cliente (ferramenta pessoal, estudo, configuração) fica de fora. Para cada cliente: "
-    "nome (como as pessoas falam numa reunião), contexto (UMA frase curta em português dizendo do que "
-    "é o trabalho), pessoas (nomes próprios de pessoas ligadas a ele, até 10), termos (produtos, "
-    "marcas, sistemas e jargão próprios desse cliente que alguém diria numa reunião, até 20; nada de "
-    "termo genérico de programação como React ou Git) e pastas (os caminhos exatamente como vieram). "
+    "que não é de cliente (ferramenta pessoal, estudo, configuração) fica de fora; pasta que não "
+    "dá para saber de quem é também. Para cada cliente: nome (como as pessoas falam numa reunião), "
+    "contexto (UMA frase curta em português dizendo o que é o NEGÓCIO do cliente, o que ele vende "
+    "ou faz, como se explicaria numa reunião; não a tarefa de programação), pessoas (nomes próprios "
+    "de pessoas do cliente ou ligadas a ele, até 10; deixe de fora a dona da pasta de trabalho, "
+    "cujo nome aparece em quase todas as pastas), termos (produtos, marcas, sistemas e jargão "
+    "desse cliente que alguém DIRIA em voz alta numa reunião, até 20; nada de termo genérico de "
+    "programação como React ou Git, nem código, ID, hash, nome de arquivo, pasta, comando, "
+    "variável ou domínio) e pastas (os caminhos exatamente como vieram). "
     "Responda SÓ com JSON, sem texto antes ou depois: "
     '[{"nome": "...", "contexto": "...", "pessoas": [...], "termos": [...], "pastas": [...]}]'
 )
@@ -148,6 +152,7 @@ def interpretar(texto: str, pastas_validas=None) -> list[dict]:
         if not isinstance(d, dict) or not str(d.get("nome") or "").strip():
             continue
         c = clientes.normalizar({k: d.get(k) for k in ("nome", "contexto", "pessoas", "termos", "pastas")})
+        c["termos"] = [t for t in c["termos"] if clientes.falavel(t)]
         if validas is not None:
             c["pastas"] = [p for p in c["pastas"] if p.casefold() in validas]
         out.append(c)

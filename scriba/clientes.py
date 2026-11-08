@@ -203,10 +203,32 @@ def sugerir_pelo_titulo(titulo: str, lista: list[dict] | None = None) -> list[st
 
 # ------------------------------------------------------------- o que vai ao Whisper --
 
+# O que ninguém diz numa reunião: hash ("7bc69f12"), ID com hífen e dígito ("GTM-TXJFV6V3",
+# "ADR-027"), sublinhado, dois-pontos, barra ou igual ("classif_2026", "seed:prod"), nome de pasta
+# ou slug ("pedidos-ao-marcal"), variável em camelCase ("workspaceId") e domínio ("gorilao.com.br").
+# Na leitura de 07/11 da pasta de trabalho, o Claude tirou termos assim da documentação técnica.
+_NAO_SE_FALA = re.compile(
+    r"[_:/@=\\]"
+    r"|(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])\b[0-9a-f]{6,}\b"
+    r"|^[A-Z]{2,}-[A-Z0-9]*\d"
+    r"|^[a-z0-9]+(?:-[a-z0-9]+)+$"
+    r"|^[a-z]+[A-Z]\w*$"
+    r"|\w\.[a-z]{2,}(?:\.[a-z]{2})?$"
+)
+
+
+def falavel(termo: str) -> bool:
+    """True se o termo é algo que se fala numa reunião (vai ao `initial_prompt`). O resto
+    continua no cadastro e no corretor de grafia, mas não gasta o prompt nem vira eco."""
+    t = (termo or "").strip()
+    return bool(t) and not _NAO_SE_FALA.search(t)
+
+
 def prompt_whisper(ids, limite: int = PROMPT_MAX) -> str:
     """O `initial_prompt` dos clientes marcados: "Reunião com A e B. <contexto de A> <contexto
     de B> Nomes: <pessoas>, <termos>." Até `limite` caracteres: o contexto de cada um primeiro,
-    depois as pessoas e os termos, um de cada cliente por vez. Vazio sem cliente."""
+    depois as pessoas e os termos, um de cada cliente por vez, pulando o que não se fala
+    (`falavel`). Vazio sem cliente."""
     cs = por_ids(ids)
     if not cs:
         return ""
@@ -224,7 +246,7 @@ def prompt_whisper(ids, limite: int = PROMPT_MAX) -> str:
     vistos = {_fold(n) for n in nomes}
     escolhidos: list[str] = []
     for termo in fila:
-        if _fold(termo) in vistos:
+        if _fold(termo) in vistos or not falavel(termo):
             continue
         tentativa = f"{cabeca} Nomes: {', '.join(escolhidos + [termo])}."
         if len(tentativa) > limite:
