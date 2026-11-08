@@ -10,7 +10,8 @@
 | 1. Bancada | ✅ `bancada/vozes_por_palavra.py` e o 1º gabarito (call de 27 min). ⏳ Faltam os gabaritos da gravação de celular de 1h29 e da call de 48 min |
 | 2. Voz por palavra | ✅ no app, atrás de `[whisper] motor = "novo"` (`scriba/motor_novo.py`) |
 | 3. Vozes com o modelo novo | ✅ `community-1` (`[diarization] model_novo`) pelos pedaços de 3 min de sempre, com a redução de vozes corrigida. 🚫 Áudio inteiro: não precisa (os pedaços deram 17 de 17 com 1,6 GB; o inteiro pede 8,9 GB) |
-| 4, 7, 8 | ⏳ não começadas (avaliado em 06/11) |
+| 4. Três modos de velocidade | 🚫 cancelada em 08/11 pelo Lucas: medido, o completo do laboratório não rendeu mais que o rápido de hoje e custa 5× o tempo (ver "Medido", 07/11 — rápido × completo) |
+| 7, 8 | ⏳ não começadas (avaliado em 08/11) |
 | 6. Clientes e vocabulário | ✅ no app atrás de `motor = "novo"` (ver "Clientes e vocabulário" abaixo). Pasta de trabalho do Lucas lida em 07/11: 17 clientes |
 | 10. Para outras pessoas usarem | ⏳ não começada (avaliado em 07/11): Mac, Atualizar pelo ScribaFish, cadastro da voz pela tela, instalação |
 | 5. Vozes no microfone | ✅ no app atrás de `motor = "novo"` e de 2+ pessoas no mic (ver "Vozes no microfone" abaixo); call de 05/11 19h58: 14 de 15 falas com o nome certo |
@@ -72,8 +73,8 @@ recente" (07/11, depois do merge do PR #2). O trabalho em andamento fica na `FOR
 `pip install -e ../REPO --no-deps` no venv e `motor = 'classico'`; o `../REPO` (1.4.21, do Allan) ficou intacto, e a cópia
 dos bancos e do config de antes da troca está em `%LOCALAPPDATA%\ScribaDev\backup-2026-11-06-antes-do-fork`.
 
-**Próximo passo:** a etapa 4 (os três modos de velocidade), numa sessão própria; e conferir a primeira call real com o
-motor novo quando houver uma.
+**Próximo passo:** conferir a primeira call real com o motor novo quando houver uma; depois, a etapa 7 (nome das vozes)
+ou a 10 (para outras pessoas usarem), na ordem que o Lucas escolher.
 
 **Git:** `origin` = `git@github-lpeixe:L-Peixe/ScribaFish.git` (push pela chave SSH da L-Peixe, blueprint FREELAS
 §4.2), e-mail local `lucaspquimico@gmail.com`, push para o `upstream` desligado. PR **dentro do ScribaFish** (base
@@ -140,6 +141,25 @@ app instalado deu "Google Tag Manager" ×54):
 O prompt sozinho não basta: no silêncio do mic o Whisper repete o próprio prompt. A defesa achou 1 trecho suspeito,
 refez sem o prompt e não precisou cortar nem apagar nada. Custa ~30 s numa call de 35 min.
 
+**07/11 — rápido × completo, call de 27 min (a de 06/11), duas trilhas, o mesmo `initial_prompt` do cliente Park do
+Gorilão nos dois** (`bancada/modos_rodar.py` + `bancada/modos_comparar.py`: as trilhas inteiras alinhadas palavra a
+palavra; variação sem conteúdo, como "tá" × "está", "pra" × "para", "né", não conta):
+
+| | Rápido (motor novo de hoje: turbo em lote 4, beam 3, palavras, defesa) | Completo (o do laboratório: `large-v3` beam 5 + 2ª passada com o turbo) |
+|---|---|---|
+| Tempo de transcrição | **51 s** (~2 min por hora de call) | 263 s (~9,5 min por hora; 192 s a 1ª passada, 66 s a 2ª) |
+| Pico de VRAM (placa de 6 GB, com ~0,9 GB já em uso) | 3,7 GB | 5,2 GB |
+| Palavras que batem entre os dois | 95% (mic) · 95% (loopback) | |
+| Laços que sobraram | 0 (a defesa cortou 1 em cada trilha) | 0 |
+| Diferenças de conteúdo | 104 em 27 min, divididas entre os dois | |
+
+Lidas pelo contexto, cada modo acerta umas e erra outras. O completo acertou "marcar como não lido" (rápido: "marcar com
+monolida"), "aparecerão", "no Atenda" e alguns cumprimentos curtos; o rápido acertou "Gorilão" (completo: "goleirão"),
+"fuçar" (completo: "forçar", 2×), "Coney Play" e frases curtas que o completo pulou. Uma frase saiu errada nos dois. A 2ª
+passada marcou 52 trechos críticos, trocou 2 e mostrou divergência em 11. O que rendia no laboratório (o contexto no
+`initial_prompt` e o corte do laço) já está no rápido desde a etapa 6. Os 19 trechos divergentes, com o áudio de cada
+um, ficaram em `LAB-TRANSCRICAO/registro/2026-11-07-rapido-x-completo/` (fora do git), sem ouvir.
+
 ## Por que o fork
 
 O ScribaDev grava bem (detecção da call, duas trilhas, pílula, notas, resumo, apontamentos). O defeito está no
@@ -167,7 +187,9 @@ inteiro com o nº de vozes, e o nome de cada voz dado pelo conteúdo.
 
 - **Escopo:** app inteiro, motor novo. *"talvez eu queira fazer algumas melhorias, né? Mas para isso que serve o fork."*
 - **Velocidade:** *"eu quero que tenha essas três opções"*: rápido com o conserto, completo, os dois em sequência;
-  **os dois em sequência já marcado**.
+  **os dois em sequência já marcado**. **Substituída em 08/11:** antes de construir, *"se o método rápido já faz um
+  rendimento igual ao do completo, [não] precisa fazer dois modos"*; medido (07/11, rápido × completo), *"Pode
+  fechar"*: fica só o rápido.
 - **Vocabulário:** na configuração inicial, *"conectar com o Claude e pegar um vocabulário geral, baseado nas pastas
   onde você trabalha… ele detectando o que talvez seja cada cliente… por repositório"*. No fim da call, *"selecionar
   quais os clientes ou repositórios estão relacionados com essa call"* (um ou mais) e *"quantas pessoas… do outro
@@ -210,9 +232,8 @@ Cada etapa mede na bancada antes de ligar: palavras, falas com a voz certa (gaba
 1. **Bancada de medição.** `bancada/vozes_por_palavra.py` + gabaritos locais: uma call de 27 min (3 vozes no
    loopback, falas atribuídas pelo conteúdo), uma gravação de celular de 1h29 (4 vozes nomeadas) e uma call de 48 min.
 2–3, 5, 6. ✅ feitas (ver "Status" e o changelog).
-4. **Os três modos de velocidade:** rápido (turbo em lote, com palavras), completo (o método do laboratório:
-   `large-v3`, contexto, 2ª passada, defesas) e os dois em sequência (a nota rápida sai, a completa a substitui).
-   Escolha na configuração e na janela do fim da call; "os dois" marcado.
+4. 🚫 cancelada em 08/11 (ver "Status"). Volta só se aparecer call em que o rápido erre muito mais que o completo: a
+   bancada (`bancada/modos_rodar.py`) mede de novo.
 7. **Nome das vozes:** cadastro de voz primeiro; as que sobrarem, o Claude propõe pelo conteúdo, com os participantes
    do cliente; o Lucas confirma na tela de vozes.
 8. **Importar áudio de celular:** arrastar um arquivo → vira uma reunião de uma trilha, com o nº de pessoas.
@@ -229,7 +250,6 @@ Cada etapa mede na bancada antes de ligar: palavras, falas com a voz certa (gaba
 ## Riscos
 
 - **VRAM 6 GB:** Whisper e pyannote nunca juntos (o pipeline já libera um antes do outro); `large-v3` float16 cabe.
-- **Tempo do completo:** ~20 min por hora de reunião na 3050 (medido: 8,5 min para 27 min, duas trilhas).
 - **Gabarito pequeno:** 17 falas na call de 27 min, atribuídas por outra sessão do Claude. Vale como sinal; a confirmação é o
   Lucas lendo.
 - **Atualizações do Allan** mexem no `pipeline.py` e no `diarize.py`: o motor novo fica em arquivos próprios e o
@@ -275,3 +295,7 @@ Cada etapa mede na bancada antes de ligar: palavras, falas com a voz certa (gaba
   documentação técnica que ninguém fala ("7bc69f12", "GTM-TXJFV6V3", "pedidos-ao-marcal", "seed:prod": 34 de 183).
   O prompt do Whisper passou a pulá-los (`clientes.falavel`), e a instrução ao Claude pede o negócio do cliente e
   palavras ditas em reunião, sem a dona da pasta.
+- **2026-11-08** — PR #5 mergeado e na `APP`. Etapa 4 cancelada antes de construir: o Lucas perguntou se o rápido já
+  rendia igual ao completo, e nunca se tinha medido o texto (os gabaritos medem quem fala). Medido na call de 27 min:
+  95% das palavras iguais, diferenças divididas entre os dois, o completo 5× mais lento e com 5,2 GB de pico. Fica só o
+  rápido; a bancada `modos_rodar.py` / `modos_comparar.py` refaz a medida.
