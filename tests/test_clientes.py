@@ -127,6 +127,19 @@ class PromptTests(_Arquivo):
         self.assertTrue(p.endswith("."))
         self.assertIn("Marçal", p)
 
+    def test_o_que_nao_se_fala_fica_fora_do_prompt(self):
+        # termos assim vieram da leitura real de uma pasta de trabalho (07/11)
+        nao = ["7bc69f12", "GTM-TXJFV6V3", "ADR-027", "classif_2026", "seed:prod", "push: false",
+               "pedidos-ao-marcal", "workspaceId", "gorilao.com.br", "useatenda.app"]
+        sim = ["GA4", "P&V", "Coney Card", "GoHighLevel", "EcommerceAdapter", "Meta Pixel", "R2",
+               "Hydrodermabrasion", "estorno"]
+        self.assertEqual([t for t in nao if clientes.falavel(t)], [])
+        self.assertEqual([t for t in sim if not clientes.falavel(t)], [])
+        self._cadastrar(termos=["7bc69f12", "lote", "GTM-TXJFV6V3"])
+        self.assertEqual(clientes.prompt_whisper(["ticketmax"]),
+                         "Reunião com TicketMax. Plataforma de venda de ingressos. Nomes: Marçal, lote.")
+        self.assertIn("7bc69f12", clientes.termos_de(["ticketmax"]))   # o corretor de grafia segue com todos
+
     def test_sem_cliente_vazio(self):
         self.assertEqual(clientes.prompt_whisper([]), "")
         self.assertEqual(clientes.prompt_whisper(["nao-existe"]), "")
@@ -272,6 +285,11 @@ class PastaTests(unittest.TestCase):
         (c,) = pasta_clientes.interpretar(texto, ["tmax"])
         self.assertEqual((c["nome"], c["pastas"], c["termos"]), ("TicketMax", ["tmax"], ["lote"]))
         self.assertEqual(pasta_clientes.interpretar("não sei"), [])
+
+    def test_interpretar_tira_termo_que_nao_se_fala(self):
+        texto = '[{"nome": "TicketMax", "termos": ["estorno", "7bc69f12", "pedidos-ao-marcal", "seed:prod"]}]'
+        (c,) = pasta_clientes.interpretar(texto)
+        self.assertEqual(c["termos"], ["estorno"])
 
     def test_propor_manda_a_coleta_sem_ferramentas(self):
         from scriba import ai

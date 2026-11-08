@@ -11,7 +11,7 @@
 | 2. Voz por palavra | ✅ no app, atrás de `[whisper] motor = "novo"` (`scriba/motor_novo.py`) |
 | 3. Vozes com o modelo novo | ✅ `community-1` (`[diarization] model_novo`) pelos pedaços de 3 min de sempre, com a redução de vozes corrigida. 🚫 Áudio inteiro: não precisa (os pedaços deram 17 de 17 com 1,6 GB; o inteiro pede 8,9 GB) |
 | 4, 7, 8 | ⏳ não começadas (avaliado em 06/11) |
-| 6. Clientes e vocabulário | ✅ no app atrás de `motor = "novo"` (ver "Clientes e vocabulário" abaixo). ⏳ Falta a leitura da pasta de verdade, com o Claude do Lucas (testada só com a IA de mentira) |
+| 6. Clientes e vocabulário | ✅ no app atrás de `motor = "novo"` (ver "Clientes e vocabulário" abaixo). Pasta de trabalho do Lucas lida em 07/11: 17 clientes |
 | 10. Para outras pessoas usarem | ⏳ não começada (avaliado em 07/11): Mac, Atualizar pelo ScribaFish, cadastro da voz pela tela, instalação |
 | 5. Vozes no microfone | ✅ no app atrás de `motor = "novo"` e de 2+ pessoas no mic (ver "Vozes no microfone" abaixo); call de 05/11 19h58: 14 de 15 falas com o nome certo |
 | 9. GitHub pessoal | ✅ `L-Peixe/ScribaFish` (ver "Git") |
@@ -42,7 +42,9 @@ com o `APP` já atualizado: o código de antes da etapa 5 não sabe que o "Eu" �
 
 **Clientes e vocabulário (etapa 6):** com o motor novo, o **Whisper nunca recebe `hotwords`**. O vocabulário entra só
 pelos clientes marcados na call, como `initial_prompt` ("Reunião com X. <contexto>. Nomes: …", até 500 caracteres, porque
-o faster-whisper guarda só os últimos ~223 tokens). Os clientes ficam em `clientes.json`, na pasta de dados do app
+o faster-whisper guarda só os últimos ~223 tokens). O prompt pula o que ninguém diz numa reunião (`clientes.falavel`):
+hash, ID do GTM ou de ADR, sublinhado, dois-pontos, slug com hífen, camelCase e domínio. Esses termos seguem no
+cadastro e no corretor de grafia. Os clientes ficam em `clientes.json`, na pasta de dados do app
 (`scriba/clientes.py`; nome, contexto, pessoas, termos, pastas). A aba **Clientes** das Configurações e o botão
 "Clientes…" do assistente aparecem só com o motor novo. Os dois têm "Ler pasta de trabalho…" (`scriba/pasta_clientes.py`):
 o app junta o que descreve cada subpasta (CLAUDE.md, README, AGENTS.md, HANDOFF, nome e descrição do `package.json`; lista
@@ -70,8 +72,8 @@ recente" (07/11, depois do merge do PR #2). O trabalho em andamento fica na `FOR
 `pip install -e ../REPO --no-deps` no venv e `motor = 'classico'`; o `../REPO` (1.4.21, do Allan) ficou intacto, e a cópia
 dos bancos e do config de antes da troca está em `%LOCALAPPDATA%\ScribaDev\backup-2026-11-06-antes-do-fork`.
 
-**Próximo passo:** conferir a primeira call real com o motor novo e a primeira leitura da pasta de trabalho (aba
-Clientes); depois, a etapa 4 (os três modos de velocidade).
+**Próximo passo:** a etapa 4 (os três modos de velocidade), numa sessão própria; e conferir a primeira call real com o
+motor novo quando houver uma.
 
 **Git:** `origin` = `git@github-lpeixe:L-Peixe/ScribaFish.git` (push pela chave SSH da L-Peixe, blueprint FREELAS
 §4.2), e-mail local `lucaspquimico@gmail.com`, push para o `upstream` desligado. PR **dentro do ScribaFish** (base
@@ -269,3 +271,7 @@ Cada etapa mede na bancada antes de ligar: palavras, falas com a voz certa (gaba
   `initial_prompt` (o Whisper não recebe mais `hotwords`), defesa contra laço e eco, vocabulário que aprende por
   cliente. Call de 05/11 19h58 com a lista antiga num cliente: 0 laços e a fala real de volta (com `hotwords`, 4 laços;
   só com o prompt, 1).
+- **2026-11-07** — PR #4 mergeado; a pasta de trabalho do Lucas lida pelo Claude deu 17 clientes, mas com termos da
+  documentação técnica que ninguém fala ("7bc69f12", "GTM-TXJFV6V3", "pedidos-ao-marcal", "seed:prod": 34 de 183).
+  O prompt do Whisper passou a pulá-los (`clientes.falavel`), e a instrução ao Claude pede o negócio do cliente e
+  palavras ditas em reunião, sem a dona da pasta.
