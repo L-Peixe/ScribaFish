@@ -73,6 +73,17 @@ recente" (07/11, depois do merge do PR #2). O trabalho em andamento fica na `FOR
 `pip install -e ../REPO --no-deps` no venv e `motor = 'classico'`; o `../REPO` (1.4.21, do Allan) ficou intacto, e a cópia
 dos bancos e do config de antes da troca está em `%LOCALAPPDATA%\ScribaDev\backup-2026-11-06-antes-do-fork`.
 
+**A chamada ao Claude é isolada da configuração pessoal (10/11):** resumo, chat, leitura da pasta de clientes e
+assistente de perfil passam todos por `ai._claude_cli`. Sem isolamento, o `claude -p` levava à Anthropic, junto de
+cada transcrição, o `~/.claude/CLAUDE.md` de quem usa e a lista de conectores, e rodava os hooks do
+`~/.claude/settings.json` (o alarme do Lucas tocou no fim de um resumo). Agora ele roda com
+`--setting-sources "" --strict-mcp-config --disable-slash-commands` e com `CLAUDE_CODE_DISABLE_CLAUDE_MDS=1` e
+`CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` (sem telemetria nem relatório de erro nessa chamada). Testado no Claude
+Code 2.1.112 com login de assinatura. O `--bare` não serve, porque exige `ANTHROPIC_API_KEY`. A transcrição continua
+indo à Anthropic, por desenho; a alternativa local é `[summary] provider = "ollama"`. O que mais sai da máquina: a
+checagem de versão no Gist do Allan (sem dado seu), o Hugging Face (modelos de voz) e, se ligada, a transcrição na nuvem
+(Groq, desligada no Lucas).
+
 **Próximo passo:** conferir a primeira call real com o motor novo quando houver uma; depois, a etapa 7 (nome das vozes)
 ou a 10 (para outras pessoas usarem), na ordem que o Lucas escolher.
 
@@ -207,6 +218,11 @@ inteiro com o nº de vozes, e o nome de cada voz dado pelo conteúdo.
 - **Clientes (07/11, múltipla escolha, as quatro recomendadas):** cadastro em **"Arquivo próprio"** (`clientes.json` e
   tela Clientes, não a tabela de clientes dos apontamentos). Ler a pasta: **"App coleta, Claude sem ferramentas"**. Fim
   da call: **"Caixinhas na janela de vozes"**. Vocabulário que aprende: **"Por cliente"**.
+- **Privacidade da chamada de IA (10/11):** pedida pelo Lucas (*"o Alan… fez muito focado na privacidade e eu prezo por
+  isso também"*). Múltipla escolha: **"Isolar tudo"** (sem CLAUDE.md, hooks, conectores, skills e telemetria),
+  **"Manter o Claude"** como provedor do resumo, a checagem de versão do Gist do Allan **"Deixar como está"**. O treino
+  com os dados da conta, *"acabei de desligar isso"* (o Lucas, em claude.ai → Privacy): a Anthropic guarda o enviado
+  por 30 dias, não 5 anos.
 
 ## Regras do fork
 
@@ -299,3 +315,7 @@ Cada etapa mede na bancada antes de ligar: palavras, falas com a voz certa (gaba
   rendia igual ao completo, e nunca se tinha medido o texto (os gabaritos medem quem fala). Medido na call de 27 min:
   95% das palavras iguais, diferenças divididas entre os dois, o completo 5× mais lento e com 5,2 GB de pico. Fica só o
   rápido; a bancada `modos_rodar.py` / `modos_comparar.py` refaz a medida.
+- **2026-11-10** — o `claude -p` do app ficou isolado da configuração pessoal (`_ISOLAR_FLAGS`/`_ISOLAR_ENV` em
+  `scriba/ai.py`). Achado de 09/11: o resumo das 19h tocou o alarme do Lucas, e uma chamada de teste respondeu com o
+  primeiro título do CLAUDE.md dele e a lista de conectores. Isolada, ela responde "NENHUMA" e nenhum hook roda.
+  Decisões de privacidade em "Decisões".

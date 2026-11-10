@@ -37,6 +37,25 @@ last_error: str | None = None
 # PATH: um resumo que caía nessa janela era pulado em silêncio (2026-10-08).
 _CLI_POLL_S = 5.0
 
+# Isolamento do `claude -p` (fork, 10/11/2026): sem estas opções a chamada carrega a
+# configuração pessoal de quem usa o app - o ~/.claude/CLAUDE.md inteiro, a lista de
+# conectores (MCP), as skills - e roda os hooks do ~/.claude/settings.json. Isso manda
+# à Anthropic, junto de cada transcrição, texto que nada tem a ver com a reunião, e faz
+# hook de terceiro (alarme, por exemplo) disparar a cada resumo. Testado no Claude Code
+# 2.1.112 com login de assinatura: com elas, a chamada não vê CLAUDE.md nem conector e
+# nenhum hook roda. O `--bare` faria o mesmo, mas exige ANTHROPIC_API_KEY (ignora o
+# login OAuth da assinatura), então não serve aqui.
+_ISOLAR_FLAGS = (
+    "--setting-sources", "",       # não lê settings de user/project/local: sem hooks
+    "--strict-mcp-config",         # só MCP de --mcp-config, que não passamos: nenhum
+    "--disable-slash-commands",    # sem skills nem comandos
+)
+_ISOLAR_ENV = {
+    "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "1",           # nenhum CLAUDE.md no contexto
+    # telemetria, relatório de erro, /feedback e auto-update só desta chamada
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+}
+
 
 def complete(
     system_prompt: str,
@@ -123,6 +142,7 @@ def _claude_cli(cfg, system_prompt, user_payload, *, timeout, cwd, hidden_window
         # sem ferramentas; com web_search, só a busca (e pré-aprovada: -p não pergunta)
         *(("--tools", "WebSearch", "--allowedTools", "WebSearch") if web_search else ("--tools", "")),
         "--no-session-persistence",
+        *_ISOLAR_FLAGS,
         "--model", cfg.model,
         "--output-format", "text",
     ]
@@ -130,7 +150,7 @@ def _claude_cli(cfg, system_prompt, user_payload, *, timeout, cwd, hidden_window
     # organizar, não raciocinar) o thinking é desperdício — benchmark mediu ~14,6k
     # tokens de thinking (80% da geração) por ~3x o tempo e 2x o custo, com qualidade
     # IGUAL ou melhor sem ele. Vale para o resumo e o test_connection (únicos usos).
-    env = {**os.environ, "MAX_THINKING_TOKENS": "0"}
+    env = {**os.environ, "MAX_THINKING_TOKENS": "0", **_ISOLAR_ENV}
 
     def run(cmd):
         return subprocess.run(
