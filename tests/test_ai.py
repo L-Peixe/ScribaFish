@@ -168,6 +168,29 @@ class ClaudeCliTests(_StateIsolado):
         self.assertEqual(self.captured["kw"]["creationflags"], ai._CREATE_NO_WINDOW)
         self.assertEqual(self.captured["kw"]["input"], "payload")
 
+    def test_chamada_isolada_da_config_pessoal(self):  # fork, 10/11
+        self._patch_run()
+        cfg = Summary(provider="claude", model="m")
+        ai._claude_cli(cfg, "sys", "p", timeout=5, cwd=None, hidden_window=False)
+        cmd = self.captured["cmd"]
+        i = cmd.index("--setting-sources")
+        self.assertEqual(cmd[i + 1], "")
+        self.assertIn("--strict-mcp-config", cmd)
+        self.assertIn("--disable-slash-commands", cmd)
+        self.assertNotIn("--mcp-config", cmd)
+        env = self.captured["kw"]["env"]
+        self.assertEqual(env["CLAUDE_CODE_DISABLE_CLAUDE_MDS"], "1")
+        self.assertEqual(env["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"], "1")
+        self.assertEqual(env["MAX_THINKING_TOKENS"], "0")
+
+    def test_isolada_tambem_com_busca_na_web(self):
+        self._patch_run()
+        cfg = Summary(provider="claude", model="m")
+        ai._claude_cli(cfg, "sys", "p", timeout=5, cwd=None, hidden_window=False, web_search=True)
+        cmd = self.captured["cmd"]
+        self.assertEqual(cmd[cmd.index("--tools") + 1], "WebSearch")
+        self.assertIn("--strict-mcp-config", cmd)
+
     def test_sem_hidden_window_creationflags_zero(self):
         self._patch_run()
         cfg = Summary(provider="claude", model="m")
